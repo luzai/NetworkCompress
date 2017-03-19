@@ -1,6 +1,6 @@
 # lazy import ...
 
-import matplotlib, sys, os, glob, cPickle, scipy, argparse, errno, json,copy, re,keras
+import matplotlib, sys, os, glob, cPickle, scipy, argparse, errno, json,copy, re
 from operator import add
 # import tensorflow as tf
 import pandas as pd
@@ -10,9 +10,18 @@ import scipy.io as sio
 # import xml.etree.ElementTree as ET
 from pprint import pprint
 import subprocess
-from subprocess import call
 # import cv2, cv
 # print "opencv version " + cv2.__version__
+
+keras_backend="theano"
+if keras_backend=="theano":
+    cmd="cp /home/xlwang/.keras/keras.json.th /home/xlwang/.keras/keras.json"
+    subprocess.call(cmd.split())
+else:
+    cmd="cp /home/xlwang/.keras/keras.json.tf /home/xlwang/.keras/keras.json"
+    subprocess.call(cmd.split())
+import keras
+
 run_root = os.getcwd()
 file_root = osp.dirname(__file__)
 

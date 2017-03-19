@@ -1,6 +1,5 @@
-from __init__ import *
 from net2net import *
-from load_transfer_data import get_transfer_data
+
 
 # get_transfer_data("../data/transfer_data/")
 
@@ -23,6 +22,7 @@ def parse_args():
                         default=0, type=int)
     _args = parser.parse_args()
     return _args
+
 
 if __name__ == "__main__":
 

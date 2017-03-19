@@ -1,21 +1,20 @@
 # !/usr/bin/env python
-from __init__ import *
-
-from keras.models import Sequential, model_from_json
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten
-from keras.optimizers import SGD
-from keras.utils import np_utils
-# from keras.datasets import mnist
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.utils import visualize_util
-# import setting
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten
+from keras.models import Sequential, model_from_json
+from keras.optimizers import SGD
+from keras.utils import np_utils, visualize_util
+
+from __init__ import *
 from load_transfer_data import get_transfer_data
+
 input_shape = (3, 32, 32)  # image shape
 nb_class = 10  # number of class
-lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
+lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=7, min_lr=0.5e-7)
 early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=20)
 csv_logger = CSVLogger('../output/net2net.csv')
+
 
 # load and pre-process data
 def preprocess_input(x):
@@ -26,17 +25,18 @@ def preprocess_output(y):
     return np_utils.to_categorical(y, nb_class)
 
 
-def limit_data(train_x):
-    return train_x[:10] #1000
+def limit_data(x):
+    return x[:10]  # 1000
+
 
 def load_data(dbg=False):
-    transfer_x,transfer_y=get_transfer_data("../data/transfer_data/")
-    transfer_y=transfer_y.reshape((-1,1))
+    transfer_x, transfer_y = get_transfer_data("../data/transfer_data/")
+    transfer_y = transfer_y.reshape((-1, 1))
     (train_x, train_y), (validation_x, validation_y) = cifar10.load_data()
-    train_x=np.concatenate((train_x,transfer_x[transfer_x.shape[0]*7/10:,...]))
-    train_y=np.concatenate((train_y,transfer_y[transfer_y.shape[0]*7/10:,...]))
-    validation_x=np.concatenate((validation_x,transfer_x[transfer_x.shape[0]*7/10:,...]))
-    validation_y=np.concatenate((validation_y,transfer_y[transfer_y.shape[0]*7/10:,...]))
+    train_x = np.concatenate((train_x, transfer_x[transfer_x.shape[0] * 7 / 10:, ...]))
+    train_y = np.concatenate((train_y, transfer_y[transfer_y.shape[0] * 7 / 10:, ...]))
+    validation_x = np.concatenate((validation_x, transfer_x[transfer_x.shape[0] * 7 / 10:, ...]))
+    validation_y = np.concatenate((validation_y, transfer_y[transfer_y.shape[0] * 7 / 10:, ...]))
 
     print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
     print('validation_x shape:', validation_x.shape,
@@ -54,8 +54,8 @@ def load_data(dbg=False):
     train_data = (train_x, train_y)
     validation_data = (validation_x, validation_y)
 
+    return train_data, validation_data
 
-    return train_data,validation_data
 
 ## despised
 # class AccHist(keras.callbacks.Callback):
@@ -208,7 +208,7 @@ def copy_weights(teacher_model, student_model, layer_names=None):
     '''
 
 
-def make_teacher_model(train_data,validation_data,nb_epoch,verbose):
+def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
     '''Train a simple CNN as teacher model.
     '''
     model = Sequential()
@@ -244,13 +244,14 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
     ind2name = [student_model_dict["config"][i]["config"]["name"]
                 for i in range(len(student_model_dict["config"]))]
 
-
     modify_layer_ind = name2ind[modify_layer_name]
-    new_conv1_width = new_conv1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"]
+    new_conv1_width = int(
+        new_conv1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"]
+    )
     student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"] = new_conv1_width
     # TODO next layer is not conv
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
-    return student_model_dict,new_conv1_width
+    return student_model_dict, new_conv1_width
 
 
 def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
@@ -262,12 +263,14 @@ def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     ind2name = [student_model_dict["config"][i]["config"]["name"]
                 for i in range(len(student_model_dict["config"]))]
     modify_layer_ind = name2ind[modify_layer_name]
-    new_fc1_width=new_fc1_width_ratio*student_model_dict["config"][modify_layer_ind]["config"]["output_dim"]
+    new_fc1_width = int(
+        new_fc1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["output_dim"]
+    )
     student_model_dict["config"][modify_layer_ind]["config"]["output_dim"] = new_fc1_width
     # automated!
     # student_model_dict["config"][modify_layer_ind]["config"]["input_dim"]=new_fc1_width
 
-    return student_model_dict,new_fc1_width
+    return student_model_dict, new_fc1_width
 
 
 def reorder_dict(d):
@@ -280,8 +283,7 @@ def reorder_dict(d):
     for i, v in enumerate(names):
         if re.findall(r"_", v): break
     type = re.findall(r"[a-z]+", names[i])[0]
-    # ind=re.findall(r"\d+",names[i])[0]
-    # ind=int(ind)
+    # ind=int(re.findall(r"\d+",names[i])[0])
     start = 1
     for i, v in enumerate(names):
         now_type = re.findall(r"[a-z]+", v)[0]
@@ -291,6 +293,19 @@ def reorder_dict(d):
     for i in range(len_of_d):
         d["config"][i]["config"]["name"] = names[i]
     return d
+
+def reorder_list(layers):
+    name2ind={v:i for i,v in enumerate(layers)}
+    for i,v in enumerate(layers):
+        if re.findall(r"_",v):break
+    layer_type=re.findall(r"[a-z]+",layers[i])[0]
+    start=1
+    for i,v in enumerate(layers):
+        now_layer_type=re.findall(r"[a-z]+",v)[0]
+        if now_layer_type==layer_type:
+            layers[i]=layer_type+str(start)
+            start+=1
+    return layers
 
 
 def reorder_model(model):
@@ -325,13 +340,12 @@ def make_wider_student_model(teacher_model,
     if new_type == "conv":
 
         new_conv1_name = new_name
-        student_model_dict , new_conv1_width= wider_conv2d_dict(new_width_ratio, new_conv1_name, teacher_model_dict)
+        student_model_dict, new_conv1_width = wider_conv2d_dict(new_width_ratio, new_conv1_name, teacher_model_dict)
 
     elif new_type == "fc":
 
         new_fc1_name = new_name
-        student_model_dict,new_fc1_width = wider_fc_dict(new_width_ratio, new_fc1_name, teacher_model_dict)
-
+        student_model_dict, new_fc1_width = wider_fc_dict(new_width_ratio, new_fc1_name, teacher_model_dict)
 
     model = model_from_json(json.dumps(student_model_dict))
 
@@ -376,7 +390,7 @@ def make_wider_student_model(teacher_model,
 def make_deeper_student_model(teacher_model,
                               train_data,
                               validation_data,
-                              init, new_name, nb_epoch=3,verbose=1):
+                              init, new_name, nb_epoch=3, verbose=1):
     '''Train a deeper student model based on teacher_model,
        with either 'random-init' (baseline) or 'net2deeper'
     '''
@@ -438,20 +452,21 @@ def copy_model(model):
     return new_model
 
 
-def make_model(teacher_model, commands,train_data,validation_data):
+def make_model(teacher_model, commands, train_data, validation_data):
     student_model = copy_model(teacher_model)
     log = []
     print "\n\n------------------------------\n\n"
 
     for cmd in commands[1:]:
+        print "Attention: ",cmd
         if cmd[0] == "net2wider" or cmd[0] == "random-pad":
-            student_model, history= make_wider_student_model(
+            student_model, history = make_wider_student_model(
                 student_model,
                 train_data, validation_data,
                 *cmd
             )
         elif cmd[0] == "net2deeper" or cmd[0] == "random-init":
-            student_model, history= make_deeper_student_model(
+            student_model, history = make_deeper_student_model(
                 student_model,
                 train_data, validation_data,
                 *cmd
@@ -519,4 +534,3 @@ def vis(log0, log12):
     # plt.plot(acc0)
     plt.savefig('../output/benchmark.png')
     plt.show()
-
