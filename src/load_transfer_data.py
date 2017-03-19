@@ -19,14 +19,14 @@ def get_transfer_data(transfer_data_path):
     Y_transfer = []
 
     file = open(transfer_data_list_path, 'r')
-
-    nb_transfer_samples = len(file.readlines())
+    file_readlines_save=file.readlines()
+    nb_transfer_samples = len(file_readlines_save)
     X_transfer = np.zeros((nb_transfer_samples, 32, 32, 3), dtype="uint8")
     Y_transfer = np.zeros((nb_transfer_samples,), dtype="uint8")
 
     cnt = 0
 
-    for line in file.readlines():
+    for line in file_readlines_save:
         tmp = line.split(' ')
         image_path = transfer_data_path + tmp[0]
         label = tmp[1]

@@ -6,41 +6,16 @@ from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten
 from keras.optimizers import SGD
 from keras.utils import np_utils
 # from keras.datasets import mnist
+from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
 from keras.utils import visualize_util
-
+# import setting
+from load_transfer_data import get_transfer_data
 input_shape = (3, 32, 32)  # image shape
 nb_class = 10  # number of class
-
-
-def parse_args():
-    """Parse input arguments."""
-    parser = argparse.ArgumentParser(description='Faster R-CNN demo')
-    parser.add_argument('--epoch', dest='nb_epoch', help='number epoch',
-                        default=4, type=int)
-    parser.add_argument("--teacher-epoch",dest="nb_teacher_epoch",help="number teacher epoch",
-                        default=50,type=int)
-    parser.add_argument('--verbose', dest='gl_verbose', help="global verbose",
-                        default=1, type=int)
-    parser.add_argument('--cpu', dest='cpu_mode',
-                        help='Use CPU mode (overrides --gpu)',
-                        action='store_true')
-    parser.add_argument("--dbg", dest="dbg",
-                        help="for dbg",
-                        action="store_true")
-    parser.add_argument("--per_iter",dest="per_iter",
-                        help="per_iter",
-                        action="store_true")
-    parser.add_argument('--gpu', dest='gpu_id', help='gpu id',
-                        default=0, type=int)
-
-    # parser.add_argument('--verbose', dest='demo_net', help='Network to use [vgg16]',
-    #                     choices=NETS.keys(), default='vgg16')
-
-    args = parser.parse_args()
-
-    return args
-
+lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
+early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=20)
+csv_logger = CSVLogger('../output/net2net.csv')
 
 # load and pre-process data
 def preprocess_input(x):
@@ -48,28 +23,51 @@ def preprocess_input(x):
 
 
 def preprocess_output(y):
-    return np_utils.to_categorical(y,nb_class)
+    return np_utils.to_categorical(y, nb_class)
 
-
-# --------
-# prepare data
-# --------
 
 def limit_data(train_x):
-    return train_x[:200]
+    return train_x[:10] #1000
+
+def load_data(dbg=False):
+    transfer_x,transfer_y=get_transfer_data("../data/transfer_data/")
+    transfer_y=transfer_y.reshape((-1,1))
+    (train_x, train_y), (validation_x, validation_y) = cifar10.load_data()
+    train_x=np.concatenate((train_x,transfer_x[transfer_x.shape[0]*7/10:,...]))
+    train_y=np.concatenate((train_y,transfer_y[transfer_y.shape[0]*7/10:,...]))
+    validation_x=np.concatenate((validation_x,transfer_x[transfer_x.shape[0]*7/10:,...]))
+    validation_y=np.concatenate((validation_y,transfer_y[transfer_y.shape[0]*7/10:,...]))
+
+    print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
+    print('validation_x shape:', validation_x.shape,
+          'validation_y shape', validation_y.shape)
+    train_x, validation_x = map(preprocess_input, [train_x, validation_x])
+    train_y, validation_y = map(preprocess_output, [train_y, validation_y])
+
+    print('Loading data...')
+    print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
+    print('validation_x shape:', validation_x.shape,
+          'validation_y shape', validation_y.shape)
+    print("\n\n---------------------------------------\n\n")
+    if dbg:
+        train_x, train_y, validation_x, validation_y = map(limit_data, [train_x, train_y, validation_x, validation_y])
+    train_data = (train_x, train_y)
+    validation_data = (validation_x, validation_y)
 
 
-class AccHist(keras.callbacks.Callback):
-    def on_train_begin(self, logs={}):
-        self.accs = []
+    return train_data,validation_data
 
-    def on_batch_end(self, batch, logs={}):
-        # pass
-        if args.per_iter:
-            self.accs.append(logs.get('acc'))
-        else:
-            self.accs=[]
-
+## despised
+# class AccHist(keras.callbacks.Callback):
+#     def on_train_begin(self, logs={}):
+#         self.accs = []
+#
+#     def on_batch_end(self, batch, logs={}):
+#         # pass
+#         if args.per_iter:
+#             self.accs.append(logs.get('acc'))
+#         else:
+#             self.accs = []
 
 
 # knowledge transfer algorithms
@@ -92,6 +90,7 @@ def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
         'successive layers from teacher model should have compatible shapes')
     assert teacher_w1.shape[0] == teacher_b1.shape[0], (
         'weight and bias from same layer should have compatible shapes')
+    # new_width=teacher_w1.shape[0]*new_width_ratio
     assert new_width > teacher_w1.shape[0], (
         'new width (nb_filter) should be bigger than the existing one')
 
@@ -143,6 +142,7 @@ def wider_fc_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
         'successive layers from teacher model should have compatible shapes')
     assert teacher_w1.shape[1] == teacher_b1.shape[0], (
         'weight and bias from same layer should have compatible shapes')
+    # new_width=teacher_w1.shape[1] * new_width_ratio
     assert new_width > teacher_w1.shape[1], (
         'new width (nout) should be bigger than the existing one')
 
@@ -208,7 +208,7 @@ def copy_weights(teacher_model, student_model, layer_names=None):
     '''
 
 
-def make_teacher_model(train_data, validation_data, nb_epoch=3):
+def make_teacher_model(train_data,validation_data,nb_epoch,verbose):
     '''Train a simple CNN as teacher model.
     '''
     model = Sequential()
@@ -224,19 +224,19 @@ def make_teacher_model(train_data, validation_data, nb_epoch=3):
                   optimizer=SGD(lr=0.01, momentum=0.9),
                   metrics=['accuracy'])
     print([l.name for l in model.layers])
-    acc_hist = AccHist()
+
     history = model.fit(
         *(train_data),
         nb_epoch=nb_epoch,
         validation_data=validation_data,
-        verbose=gl_verbose if nb_epoch != 0 else 0,
-        callbacks=[acc_hist]
+        verbose=verbose if verbose != 0 else 0,
+        callbacks=[lr_reducer, early_stopper, csv_logger]
     )
     # print acc_hist.accs
-    return model, history, [t[()] for t in acc_hist.accs]
+    return model, history
 
 
-def wider_conv2d_dict(new_conv1_width, modify_layer_name, teacher_model_dict):
+def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_dict):
     student_model_dict = copy.deepcopy(teacher_model_dict)
     # student_model_dict=teacher_model_dict
     name2ind = {student_model_dict["config"][i]["config"]["name"]: i
@@ -244,14 +244,16 @@ def wider_conv2d_dict(new_conv1_width, modify_layer_name, teacher_model_dict):
     ind2name = [student_model_dict["config"][i]["config"]["name"]
                 for i in range(len(student_model_dict["config"]))]
 
+
     modify_layer_ind = name2ind[modify_layer_name]
+    new_conv1_width = new_conv1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"]
     student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"] = new_conv1_width
     # TODO next layer is not conv
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
-    return student_model_dict
+    return student_model_dict,new_conv1_width
 
 
-def wider_fc_dict(new_fc1_width, modify_layer_name, teacher_model_dict):
+def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     # student_model_dict=teacher_model_dict
     student_model_dict = copy.deepcopy(teacher_model_dict)
     name2ind = {student_model_dict["config"][i]["config"]["name"]: i
@@ -260,11 +262,12 @@ def wider_fc_dict(new_fc1_width, modify_layer_name, teacher_model_dict):
     ind2name = [student_model_dict["config"][i]["config"]["name"]
                 for i in range(len(student_model_dict["config"]))]
     modify_layer_ind = name2ind[modify_layer_name]
+    new_fc1_width=new_fc1_width_ratio*student_model_dict["config"][modify_layer_ind]["config"]["output_dim"]
     student_model_dict["config"][modify_layer_ind]["config"]["output_dim"] = new_fc1_width
     # automated!
     # student_model_dict["config"][modify_layer_ind]["config"]["input_dim"]=new_fc1_width
 
-    return student_model_dict
+    return student_model_dict,new_fc1_width
 
 
 def reorder_dict(d):
@@ -309,8 +312,9 @@ def reorder_model(model):
     return model
 
 
-def make_wider_student_model(teacher_model, train_data,
-                             validation_data, init, new_name, new_width, nb_epoch=3):
+def make_wider_student_model(teacher_model,
+                             train_data, validation_data,
+                             init, new_name, new_width_ratio, nb_epoch=3, verbose=1):
     '''Train a wider student model based on teacher_model,
        with either 'random-pad' (baseline) or 'net2wider'
     '''
@@ -319,14 +323,15 @@ def make_wider_student_model(teacher_model, train_data,
     new_ind = int(new_ind)
     teacher_model_dict = json.loads(teacher_model.to_json())
     if new_type == "conv":
-        new_conv1_width = new_width
+
         new_conv1_name = new_name
-        student_model_dict = wider_conv2d_dict(new_conv1_width, new_conv1_name, teacher_model_dict)
+        student_model_dict , new_conv1_width= wider_conv2d_dict(new_width_ratio, new_conv1_name, teacher_model_dict)
 
     elif new_type == "fc":
-        new_fc1_width = new_width
+
         new_fc1_name = new_name
-        student_model_dict = wider_fc_dict(new_fc1_width, new_fc1_name, teacher_model_dict)
+        student_model_dict,new_fc1_width = wider_fc_dict(new_width_ratio, new_fc1_name, teacher_model_dict)
+
 
     model = model_from_json(json.dumps(student_model_dict))
 
@@ -356,20 +361,22 @@ def make_wider_student_model(teacher_model, train_data,
                   optimizer=SGD(lr=0.001, momentum=0.9),
                   metrics=['accuracy'])
     print([l.name for l in model.layers])
-    acc_hist = AccHist()
+
     history = model.fit(
         *(train_data),
         nb_epoch=nb_epoch,
         validation_data=validation_data,
-        verbose=gl_verbose if nb_epoch != 0 else 0,
-        callbacks=[acc_hist]
+        verbose=verbose if nb_epoch != 0 else 0,
+        callbacks=[lr_reducer, early_stopper, csv_logger]
     )
 
-    return model, history, [t[()] for t in acc_hist.accs]
+    return model, history
 
 
-def make_deeper_student_model(teacher_model, train_data,
-                              validation_data, init, new_name, nb_epoch=3):
+def make_deeper_student_model(teacher_model,
+                              train_data,
+                              validation_data,
+                              init, new_name, nb_epoch=3,verbose=1):
     '''Train a deeper student model based on teacher_model,
        with either 'random-init' (baseline) or 'net2deeper'
     '''
@@ -409,20 +416,16 @@ def make_deeper_student_model(teacher_model, train_data,
                   optimizer=SGD(lr=0.001, momentum=0.9),
                   metrics=['accuracy'])
     print([l.name for l in model.layers])
-    acc_hist = AccHist()
+
     history = model.fit(
         *(train_data),
         nb_epoch=nb_epoch,
         validation_data=validation_data,
-        verbose=gl_verbose if nb_epoch != 0 else 0,
-        callbacks=[acc_hist]
+        verbose=verbose if nb_epoch != 0 else 0,
+        callbacks=[lr_reducer, early_stopper, csv_logger]
     )
 
-    return model, history, [t[()] for t in acc_hist.accs]
-
-
-def echo():
-    print "verbose", gl_verbose, "epoch", nb_epoch,"teacher epoch",args.nb_teacher_epoch
+    return model, history
 
 
 def copy_model(model):
@@ -435,20 +438,20 @@ def copy_model(model):
     return new_model
 
 
-def make_model(teacher_model, commands):
+def make_model(teacher_model, commands,train_data,validation_data):
     student_model = copy_model(teacher_model)
     log = []
     print "\n\n------------------------------\n\n"
 
     for cmd in commands[1:]:
         if cmd[0] == "net2wider" or cmd[0] == "random-pad":
-            student_model, history, acc = make_wider_student_model(
+            student_model, history= make_wider_student_model(
                 student_model,
                 train_data, validation_data,
                 *cmd
             )
         elif cmd[0] == "net2deeper" or cmd[0] == "random-init":
-            student_model, history, acc = make_deeper_student_model(
+            student_model, history= make_deeper_student_model(
                 student_model,
                 train_data, validation_data,
                 *cmd
@@ -456,17 +459,16 @@ def make_model(teacher_model, commands):
         else:
             raise ValueError('Unsupported cmd: %s' % cmd[0])
 
-        log_append_t=[
+        log_append_t = [
             cmd,
             [l.name for l in student_model.layers],
             history.history["val_acc"] if history.history else []
-            ]
-        if args.per_iter:
-            log_append_t+=[acc]
+        ]
+
         log.append(log_append_t)
 
     name = commands[0][0]
-    os.chdir("./output")
+    os.chdir("../output")
     student_model.save_weights(name + ".h5")
     with open(name + ".json", "w") as f:
         json.dump(
@@ -482,29 +484,27 @@ def make_model(teacher_model, commands):
             [f.write("\t" + str(log_item_item) + "\n") for log_item_item in log_item[1:]]
     visualize_util.plot(teacher_model, to_file="teacher.png", show_shapes=True)
     visualize_util.plot(student_model, to_file=name + '.png', show_shapes=True)
-    os.chdir("..")
+    os.chdir("../src")
 
     return student_model, log
 
 
-def smooth(x, y):
-    import matplotlib.pyplot as plt
-    from scipy.optimize import curve_fit
-    from scipy.interpolate import interp1d
-    from scipy.signal import savgol_filter
-    import numpy as np
-    x, y = np.array(x), np.array(y)
-    xx = np.linspace(x.min(), x.max(), x.shape[0] + 100)
-    # xx=x
-    # interpolate + smooth
-    itp = interp1d(x, y, kind='linear')
-    window_size, poly_order = 101, 3
-    yy_sg = savgol_filter(itp(xx), window_size, poly_order)
-    return xx, yy_sg
-
+# def smooth(x, y):
+#     import matplotlib.pyplot as plt
+#     from scipy.optimize import curve_fit
+#     from scipy.interpolate import interp1d
+#     from scipy.signal import savgol_filter
+#     import numpy as np
+#     x, y = np.array(x), np.array(y)
+#     xx = np.linspace(x.min(), x.max(), x.shape[0] + 100)
+#     # xx=x
+#     # interpolate + smooth
+#     itp = interp1d(x, y, kind='linear')
+#     window_size, poly_order = 101, 3
+#     yy_sg = savgol_filter(itp(xx), window_size, poly_order)
+#     return xx, yy_sg
 
 def vis(log0, log12):
-
     acc0 = np.array(log0[0][-1])
 
     for log in log12:
@@ -513,93 +513,10 @@ def vis(log0, log12):
             acc += log_item[-1]
         acc = np.array(acc)
         acc_con = np.concatenate((acc0, acc))
-        if args.per_iter:
-            plt.plot(*smooth(np.arange(acc_con.shape[0]), acc_con))
-        else:
-            plt.plot(acc_con)
-    plt.legend(["net2net", "random","origin"])
+        plt.plot(acc_con)
+        print acc_con.shape
+    plt.legend(["net2net", "random", "origin"])
     # plt.plot(acc0)
-    plt.savefig('benchmark.png')
+    plt.savefig('../output/benchmark.png')
     plt.show()
 
-
-
-if __name__ == "__main__":
-    global nb_epoch, gl_verbose, train_x, train_y, validation_x, validation_y
-    (train_x, train_y), (validation_x, validation_y) = cifar10.load_data()
-    print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
-    print('validation_x shape:', validation_x.shape,
-          'validation_y shape', validation_y.shape)
-    train_x, validation_x = map(preprocess_input, [train_x, validation_x])
-    train_y, validation_y = map(preprocess_output, [train_y, validation_y])
-
-    print('Loading data...')
-    print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
-    print('validation_x shape:', validation_x.shape,
-          'validation_y shape', validation_y.shape)
-    print("\n\n---------------------------------------\n\n")
-
-    args = parse_args()
-    nb_epoch = args.nb_epoch
-    gl_verbose = args.gl_verbose
-    if args.dbg:
-        train_x, train_y, validation_x, validation_y = map(limit_data, [train_x, train_y, validation_x, validation_y])
-        nb_epoch = 150
-        gl_verbose = 1
-        args.nb_teacher_epoch=50
-    echo()
-
-    train_data = (train_x, train_y)
-    validation_data = (validation_x, validation_y)
-    ## train teacher model
-    teacher_model, history, acc = make_teacher_model(train_data,
-                                                     validation_data,
-                                                     nb_epoch=args.nb_teacher_epoch)
-    log0 = [[["make_teacher"],
-            [l.name for l in teacher_model.layers],
-            history.history["val_acc"] if history.history else[],
-            ]]
-    if args.per_iter:
-        log0+=[acc]
-    ## train net2net student model
-    command = [
-        ["net2net"],  # model name
-        ["net2wider", "conv1", 128, 0],  # command name, new layer, new width, number of epoch
-        ["net2wider", "fc1", 128, 0],
-        ["net2deeper", "conv2", 0],
-        ["net2deeper", "fc1", nb_epoch]
-    ]
-    student_model, log1 = make_model(teacher_model, command)
-
-
-    ## train random student model
-    command = [
-        ["random"],
-        ["random-pad", "conv1", 128, 0],
-        ["random-pad", "fc1", 128, 0],
-        ["random-init", "conv2", 0],
-        ["random-init", "fc1", nb_epoch]
-    ]
-    student_model, log2 = make_model(teacher_model, command)
-
-
-    ## continue train teacher model
-    acc_hist = AccHist()
-    history = teacher_model.fit(
-        *(train_data),
-        nb_epoch=nb_epoch,
-        validation_data=validation_data,
-        verbose=gl_verbose if nb_epoch != 0 else 0,
-        callbacks=[acc_hist]
-    )
-    log3= [[["make_teacher_cont"],
-            [l.name for l in teacher_model.layers],
-            history.history["val_acc"] if history.history else[],
-            ]]
-    if args.per_iter:
-        log3 += [t[()] for t in acc_hist.accs]
-
-    ## print log
-    # map(lambda x: pprint(x,indent=2),["\n",log0,"\n",log1,"\n",log2])
-
-    vis(log0, [log1, log2,log3])
