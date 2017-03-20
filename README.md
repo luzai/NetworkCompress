@@ -14,7 +14,7 @@ Inspired by net2net, network distillation.
 - generate soft-taget
 - experiments on random generate model
   - [finish] generate random feasible command 
-  - check the completeness
+  - check the completeness 
   - run code parallel, find some rule.
 - experiments on  comparing two type models:
   - discuss and specify the requirements of these two model

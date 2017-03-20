@@ -36,7 +36,7 @@ def rand_cmd(possible_layer):
         del possible_layer[-1]
         cmd += [
             np.random.choice(possible_layer),
-            np.random.uniform(1, 3),
+            np.random.uniform(1, 2),
             10000,
             args.gl_verbose
         ]
@@ -71,8 +71,8 @@ if __name__ == "__main__":
     if args.dbg:
         args.nb_epoch = 1
         args.gl_verbose = 2
-        args.nb_teacher_epoch = 10000
-
+        args.nb_teacher_epoch = 1
+        np.random.seed(16)
     pprint(args)
 
     """train teacher model"""
@@ -105,14 +105,7 @@ if __name__ == "__main__":
     pprint(command)
     print(possible_layer)
 
-    # command = [
-    #     ["net2net"],  # model name
-    #     ["net2wider", "conv1", 2, 0, args.gl_verbose],  # command name, new layer, new width, number of epoch
-    #     ["net2wider", "fc1", 2, 0, args.gl_verbose],
-    #     ["net2deeper", "conv2", 0, args.gl_verbose],
-    #     ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose]
-    # ]
-
     student_model, log1 = make_model(teacher_model, command,
                                      train_data, validation_data)
     print log1
+    vis(log0,[log1])

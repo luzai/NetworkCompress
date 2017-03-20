@@ -1,6 +1,5 @@
 from net2net import *
 
-
 # get_transfer_data("../data/transfer_data/")
 
 def parse_args():
@@ -30,7 +29,7 @@ if __name__ == "__main__":
     train_data, validation_data = load_data(args.dbg)
     if args.dbg:
         args.nb_epoch = 150
-        args.gl_verbose = 1
+        args.gl_verbose = 2
         args.nb_teacher_epoch = 50
 
     pprint(args)

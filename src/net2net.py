@@ -1,4 +1,6 @@
 # !/usr/bin/env python
+from init import *
+
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
 from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten
@@ -6,13 +8,12 @@ from keras.models import Sequential, model_from_json
 from keras.optimizers import SGD
 from keras.utils import np_utils, visualize_util
 
-from __init__ import *
 from load_transfer_data import get_transfer_data
 
 input_shape = (3, 32, 32)  # image shape
 nb_class = 10  # number of class
-lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=7, min_lr=0.5e-7)
-early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=20)
+lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
+early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=2)
 csv_logger = CSVLogger('../output/net2net.csv')
 
 
@@ -26,7 +27,7 @@ def preprocess_output(y):
 
 
 def limit_data(x):
-    return x[:10]  # 1000
+    return x[:32]  # 1000
 
 
 def load_data(dbg=False):
@@ -143,7 +144,7 @@ def wider_fc_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
     assert teacher_w1.shape[1] == teacher_b1.shape[0], (
         'weight and bias from same layer should have compatible shapes')
     # new_width=teacher_w1.shape[1] * new_width_ratio
-    assert new_width > teacher_w1.shape[1], (
+    assert new_width >= teacher_w1.shape[1], (
         'new width (nout) should be bigger than the existing one')
 
     n = new_width - teacher_w1.shape[1]
@@ -245,14 +246,28 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
                 for i in range(len(student_model_dict["config"]))]
 
     modify_layer_ind = name2ind[modify_layer_name]
-    new_conv1_width = int(
-        new_conv1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"]
+    CONV_WIDTH_LIMITS=512
+    new_conv1_width = min(
+        CONV_WIDTH_LIMITS,
+        int(
+            new_conv1_width_ratio
+            * student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"]
+        )
     )
+
     student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"] = new_conv1_width
     # TODO next layer is not conv
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
-    return student_model_dict, new_conv1_width
+    return student_model_dict, new_conv1_width, new_conv1_width==CONV_WIDTH_LIMITS
 
+def to_uniform_init_dict(student_model_dict):
+    # need to be add when dropout needed
+    # but I add it now
+    for layer in student_model_dict["config"]:
+        if layer["class_name"]=="Dense":
+            layer["config"]["init"]="glorot_uniform"
+    return student_model_dict
+    # pass
 
 def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     # student_model_dict=teacher_model_dict
@@ -263,14 +278,21 @@ def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     ind2name = [student_model_dict["config"][i]["config"]["name"]
                 for i in range(len(student_model_dict["config"]))]
     modify_layer_ind = name2ind[modify_layer_name]
-    new_fc1_width = int(
+    FC_WIDTH_LIMITS=4096
+    new_fc1_width = min(
+        FC_WIDTH_LIMITS,
+        int(
         new_fc1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["output_dim"]
     )
+    )
     student_model_dict["config"][modify_layer_ind]["config"]["output_dim"] = new_fc1_width
+    student_model_dict["config"][modify_layer_ind]["config"]["init"] = "glorot_uniform"
+    # student_model_dict["config"][modify_layer_ind+1]["config"]["init"] = "glorot_uniform"
+    student_model_dict=to_uniform_init_dict(student_model_dict)
     # automated!
-    # student_model_dict["config"][modify_layer_ind]["config"]["input_dim"]=new_fc1_width
-
-    return student_model_dict, new_fc1_width
+    # student_model_dict["config"][modify_layer_ind+1]["config"]["input_dim"]=new_fc1_width
+    # student_model_dict["config"][modify_layer_ind + 1]["config"]["batch_input_shape"]=[None,new_fc1_width]
+    return student_model_dict, new_fc1_width,new_fc1_width==FC_WIDTH_LIMITS
 
 
 def reorder_dict(d):
@@ -340,13 +362,14 @@ def make_wider_student_model(teacher_model,
     if new_type == "conv":
 
         new_conv1_name = new_name
-        student_model_dict, new_conv1_width = wider_conv2d_dict(new_width_ratio, new_conv1_name, teacher_model_dict)
+        student_model_dict, new_conv1_width,return_flag = wider_conv2d_dict(new_width_ratio, new_conv1_name, teacher_model_dict)
 
     elif new_type == "fc":
 
         new_fc1_name = new_name
-        student_model_dict, new_fc1_width = wider_fc_dict(new_width_ratio, new_fc1_name, teacher_model_dict)
-
+        student_model_dict, new_fc1_width,return_flag = wider_fc_dict(new_width_ratio, new_fc1_name, teacher_model_dict)
+    if return_flag:
+        return teacher_model,None
     model = model_from_json(json.dumps(student_model_dict))
 
     layer_name = [l.name for l in teacher_model.layers]
@@ -458,7 +481,9 @@ def make_model(teacher_model, commands, train_data, validation_data):
     print "\n\n------------------------------\n\n"
 
     for cmd in commands[1:]:
+        os.system("nvidia-smi")
         print "Attention: ",cmd
+        # visualize_util.plot(student_model, to_file=str(int(time.time())) + '.png', show_shapes=True)
         if cmd[0] == "net2wider" or cmd[0] == "random-pad":
             student_model, history = make_wider_student_model(
                 student_model,
@@ -473,7 +498,11 @@ def make_model(teacher_model, commands, train_data, validation_data):
             )
         else:
             raise ValueError('Unsupported cmd: %s' % cmd[0])
-
+        student_model.summary()
+        os.system("nvidia-smi")
+        if history==None:
+            continue
+        # print raw_input("check mem")
         log_append_t = [
             cmd,
             [l.name for l in student_model.layers],
