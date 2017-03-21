@@ -1,4 +1,6 @@
 # xlwang custom
+*.h5
+data/
 example/
 test/
 .idea/

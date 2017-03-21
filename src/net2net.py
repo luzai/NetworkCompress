@@ -13,7 +13,7 @@ from load_transfer_data import get_transfer_data
 input_shape = (3, 32, 32)  # image shape
 nb_class = 10  # number of class
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
-early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=2)
+early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=20)
 csv_logger = CSVLogger('../output/net2net.csv')
 
 
@@ -27,7 +27,7 @@ def preprocess_output(y):
 
 
 def limit_data(x):
-    return x[:32]  # 1000
+    return x[:32]  #
 
 
 def load_data(dbg=False):
@@ -36,8 +36,8 @@ def load_data(dbg=False):
     (train_x, train_y), (validation_x, validation_y) = cifar10.load_data()
     train_x = np.concatenate((train_x, transfer_x[transfer_x.shape[0] * 7 / 10:, ...]))
     train_y = np.concatenate((train_y, transfer_y[transfer_y.shape[0] * 7 / 10:, ...]))
-    validation_x = np.concatenate((validation_x, transfer_x[transfer_x.shape[0] * 7 / 10:, ...]))
-    validation_y = np.concatenate((validation_y, transfer_y[transfer_y.shape[0] * 7 / 10:, ...]))
+    validation_x = np.concatenate((validation_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
+    validation_y = np.concatenate((validation_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
 
     print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
     print('validation_x shape:', validation_x.shape,
@@ -256,7 +256,7 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
     )
 
     student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"] = new_conv1_width
-    # TODO next layer is not conv
+
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
     return student_model_dict, new_conv1_width, new_conv1_width==CONV_WIDTH_LIMITS
 

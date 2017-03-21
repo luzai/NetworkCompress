@@ -1,5 +1,7 @@
 # NetworkCompress
 
+**Move to [github/NetworkCompress](https://github.com/new)**
+
 Inspired by net2net, network distillation.
 
 ## Environment

@@ -20,7 +20,7 @@ cmd="rm -f __init__.pyc init.pyc load_transfer_data.pyc  net2net.pyc"
 if subprocess.call(cmd.split())==0 : print "reload"
 
 keras_backend="theano"
-gpu=True
+gpu=False
 if keras_backend=="theano":
     cmd="cp /home/xlwang/.keras/keras.json.th /home/xlwang/.keras/keras.json"
     if subprocess.call(cmd.split())==0: print "using keras backend theano"
