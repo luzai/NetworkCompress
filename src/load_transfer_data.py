@@ -1,7 +1,7 @@
 import  matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
-
+import os.path as osp
 def gray2rgb(gray):
     rgb = np.zeros((32, 32, 3), dtype = "uint8")
     rgb[:, :, 0] = gray
@@ -13,7 +13,7 @@ def gray2rgb(gray):
 def get_transfer_data(transfer_data_path):
 
     #transfer_data_path = '/home/gx/NetworkCompress/data/transfer_data/'
-    transfer_data_list_path = transfer_data_path + 'trans_data_list.txt'
+    transfer_data_list_path = osp.join(transfer_data_path , 'trans_data_list.txt')
 
     X_transfer = []
     Y_transfer = []
@@ -28,7 +28,7 @@ def get_transfer_data(transfer_data_path):
 
     for line in file_readlines_save:
         tmp = line.split(' ')
-        image_path = transfer_data_path + tmp[0]
+        image_path = osp.join(transfer_data_path , tmp[0])
         label = tmp[1]
         x = mpimg.imread(image_path)
         if x.shape == (32, 32):

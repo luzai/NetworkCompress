@@ -14,7 +14,7 @@ input_shape = (3, 32, 32)  # image shape
 nb_class = 10  # number of class
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
 early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=20)
-csv_logger = CSVLogger('../output/net2net.csv')
+csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
 
 
 # load and pre-process data
@@ -27,17 +27,18 @@ def preprocess_output(y):
 
 
 def limit_data(x):
-    return x[:32]  #
+    return x[:1]  #
 
 
 def load_data(dbg=False):
-    transfer_x, transfer_y = get_transfer_data("../data/transfer_data/")
+    transfer_x, transfer_y = get_transfer_data(osp.join(root_dir, "data", "transfer_data"))
     transfer_y = transfer_y.reshape((-1, 1))
     (train_x, train_y), (validation_x, validation_y) = cifar10.load_data()
-    train_x = np.concatenate((train_x, transfer_x[transfer_x.shape[0] * 7 / 10:, ...]))
-    train_y = np.concatenate((train_y, transfer_y[transfer_y.shape[0] * 7 / 10:, ...]))
-    validation_x = np.concatenate((validation_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
-    validation_y = np.concatenate((validation_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
+
+    train_x = np.concatenate((train_x, transfer_x))
+    train_y = np.concatenate((train_y, transfer_y))
+    # validation_x = np.concatenate((validation_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
+    # validation_y = np.concatenate((validation_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
 
     print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
     print('validation_x shape:', validation_x.shape,
@@ -58,7 +59,7 @@ def load_data(dbg=False):
     return train_data, validation_data
 
 
-## despised
+## Deprecated
 # class AccHist(keras.callbacks.Callback):
 #     def on_train_begin(self, logs={}):
 #         self.accs = []
@@ -144,7 +145,7 @@ def wider_fc_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
     assert teacher_w1.shape[1] == teacher_b1.shape[0], (
         'weight and bias from same layer should have compatible shapes')
     # new_width=teacher_w1.shape[1] * new_width_ratio
-    assert new_width >= teacher_w1.shape[1], (
+    assert new_width > teacher_w1.shape[1], (
         'new width (nout) should be bigger than the existing one')
 
     n = new_width - teacher_w1.shape[1]
@@ -246,7 +247,7 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
                 for i in range(len(student_model_dict["config"]))]
 
     modify_layer_ind = name2ind[modify_layer_name]
-    CONV_WIDTH_LIMITS=512
+    CONV_WIDTH_LIMITS = 512
     new_conv1_width = min(
         CONV_WIDTH_LIMITS,
         int(
@@ -258,16 +259,18 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
     student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"] = new_conv1_width
 
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
-    return student_model_dict, new_conv1_width, new_conv1_width==CONV_WIDTH_LIMITS
+    return student_model_dict, new_conv1_width, new_conv1_width == CONV_WIDTH_LIMITS
+
 
 def to_uniform_init_dict(student_model_dict):
     # need to be add when dropout needed
     # but I add it now
     for layer in student_model_dict["config"]:
-        if layer["class_name"]=="Dense":
-            layer["config"]["init"]="glorot_uniform"
+        if layer["class_name"] == "Dense":
+            layer["config"]["init"] = "glorot_uniform"
     return student_model_dict
     # pass
+
 
 def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     # student_model_dict=teacher_model_dict
@@ -278,21 +281,20 @@ def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     ind2name = [student_model_dict["config"][i]["config"]["name"]
                 for i in range(len(student_model_dict["config"]))]
     modify_layer_ind = name2ind[modify_layer_name]
-    FC_WIDTH_LIMITS=4096
+    FC_WIDTH_LIMITS = 4096
+    old_fc1_width=new_fc1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["output_dim"]
     new_fc1_width = min(
         FC_WIDTH_LIMITS,
-        int(
-        new_fc1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["output_dim"]
-    )
+        int(old_fc1_width)
     )
     student_model_dict["config"][modify_layer_ind]["config"]["output_dim"] = new_fc1_width
     student_model_dict["config"][modify_layer_ind]["config"]["init"] = "glorot_uniform"
     # student_model_dict["config"][modify_layer_ind+1]["config"]["init"] = "glorot_uniform"
-    student_model_dict=to_uniform_init_dict(student_model_dict)
+    student_model_dict = to_uniform_init_dict(student_model_dict)
     # automated!
     # student_model_dict["config"][modify_layer_ind+1]["config"]["input_dim"]=new_fc1_width
     # student_model_dict["config"][modify_layer_ind + 1]["config"]["batch_input_shape"]=[None,new_fc1_width]
-    return student_model_dict, new_fc1_width,new_fc1_width==FC_WIDTH_LIMITS
+    return student_model_dict, new_fc1_width, new_fc1_width == FC_WIDTH_LIMITS or old_fc1_width==new_fc1_width
 
 
 def reorder_dict(d):
@@ -316,17 +318,18 @@ def reorder_dict(d):
         d["config"][i]["config"]["name"] = names[i]
     return d
 
+
 def reorder_list(layers):
-    name2ind={v:i for i,v in enumerate(layers)}
-    for i,v in enumerate(layers):
-        if re.findall(r"_",v):break
-    layer_type=re.findall(r"[a-z]+",layers[i])[0]
-    start=1
-    for i,v in enumerate(layers):
-        now_layer_type=re.findall(r"[a-z]+",v)[0]
-        if now_layer_type==layer_type:
-            layers[i]=layer_type+str(start)
-            start+=1
+    name2ind = {v: i for i, v in enumerate(layers)}
+    for i, v in enumerate(layers):
+        if re.findall(r"_", v): break
+    layer_type = re.findall(r"[a-z]+", layers[i])[0]
+    start = 1
+    for i, v in enumerate(layers):
+        now_layer_type = re.findall(r"[a-z]+", v)[0]
+        if now_layer_type == layer_type:
+            layers[i] = layer_type + str(start)
+            start += 1
     return layers
 
 
@@ -362,14 +365,16 @@ def make_wider_student_model(teacher_model,
     if new_type == "conv":
 
         new_conv1_name = new_name
-        student_model_dict, new_conv1_width,return_flag = wider_conv2d_dict(new_width_ratio, new_conv1_name, teacher_model_dict)
+        student_model_dict, new_conv1_width, return_flag = wider_conv2d_dict(new_width_ratio, new_conv1_name,
+                                                                             teacher_model_dict)
 
     elif new_type == "fc":
 
         new_fc1_name = new_name
-        student_model_dict, new_fc1_width,return_flag = wider_fc_dict(new_width_ratio, new_fc1_name, teacher_model_dict)
+        student_model_dict, new_fc1_width, return_flag = wider_fc_dict(new_width_ratio, new_fc1_name,
+                                                                       teacher_model_dict)
     if return_flag:
-        return teacher_model,None
+        return teacher_model, None
     model = model_from_json(json.dumps(student_model_dict))
 
     layer_name = [l.name for l in teacher_model.layers]
@@ -481,8 +486,9 @@ def make_model(teacher_model, commands, train_data, validation_data):
     print "\n\n------------------------------\n\n"
 
     for cmd in commands[1:]:
-        os.system("nvidia-smi")
-        print "Attention: ",cmd
+        print "\n\n------------------------------\n\n"
+        # os.system("nvidia-smi")
+        print "Attention: ", cmd
         # visualize_util.plot(student_model, to_file=str(int(time.time())) + '.png', show_shapes=True)
         if cmd[0] == "net2wider" or cmd[0] == "random-pad":
             student_model, history = make_wider_student_model(
@@ -498,9 +504,9 @@ def make_model(teacher_model, commands, train_data, validation_data):
             )
         else:
             raise ValueError('Unsupported cmd: %s' % cmd[0])
-        student_model.summary()
-        os.system("nvidia-smi")
-        if history==None:
+        # student_model.summary()
+        # os.system("nvidia-smi")
+        if history == None:
             continue
         # print raw_input("check mem")
         log_append_t = [
@@ -511,8 +517,11 @@ def make_model(teacher_model, commands, train_data, validation_data):
 
         log.append(log_append_t)
 
-    name = commands[0][0]
-    os.chdir("../output")
+    name = commands[0]
+
+    _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
+    subprocess.call(_shell_cmd.split())
+    os.chdir(osp.join(root_dir, "output", name))
     student_model.save_weights(name + ".h5")
     with open(name + ".json", "w") as f:
         json.dump(
@@ -528,7 +537,7 @@ def make_model(teacher_model, commands, train_data, validation_data):
             [f.write("\t" + str(log_item_item) + "\n") for log_item_item in log_item[1:]]
     visualize_util.plot(teacher_model, to_file="teacher.png", show_shapes=True)
     visualize_util.plot(student_model, to_file=name + '.png', show_shapes=True)
-    os.chdir("../src")
+    os.chdir("../../src")
 
     return student_model, log
 
@@ -548,7 +557,7 @@ def make_model(teacher_model, commands, train_data, validation_data):
 #     yy_sg = savgol_filter(itp(xx), window_size, poly_order)
 #     return xx, yy_sg
 
-def vis(log0, log12):
+def vis(log0, log12, command):
     acc0 = np.array(log0[0][-1])
 
     for log in log12:
@@ -557,9 +566,16 @@ def vis(log0, log12):
             acc += log_item[-1]
         acc = np.array(acc)
         acc_con = np.concatenate((acc0, acc))
+
         plt.plot(acc_con)
         print acc_con.shape
-    plt.legend(["net2net", "random", "origin"])
+    plt.legend([command[0]])
     # plt.plot(acc0)
-    plt.savefig('../output/benchmark.png')
-    plt.show()
+    os.chdir(osp.join(root_dir, "output", command[0]))
+    np.save("val_acc.npz", acc_con)
+    plt.savefig('val_acc.png')
+    try:
+        plt.show()
+    finally:
+        pass
+    os.chdir(osp.join(root_dir, "src"))

@@ -1,6 +1,6 @@
 # NetworkCompress
 
-**Move to [github/NetworkCompress](https://github.com/new)**
+**Move to [luzai/NetworkCompress](https://github.com/luzai/NetworkCompress)**
 
 Inspired by net2net, network distillation.
 
