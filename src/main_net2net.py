@@ -26,6 +26,11 @@ if __name__ == "__main__":
 
     args = parse_args()
     train_data, validation_data = load_data(args.dbg)
+    train_logits=np.asarray(np.load(osp.join(root_dir,"data","resnet18_logits_transfer.npy")))
+    test_logits=np.asarray(np.load(osp.join(root_dir,"data","resnet18_logits_test.npy")))
+    print ('t_logits_transfer.shape: ', train_logits.shape)
+    print ('t_logits_test.shape: ', test_logits.shape)
+
     if args.dbg:
         args.nb_epoch = 1
         args.gl_verbose = 0

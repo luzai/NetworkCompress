@@ -1,37 +1,49 @@
 from net2net import *
 from keras.layers import Dropout,LSTM,Embedding,Activation
 from sklearn.preprocessing import MultiLabelBinarizer
+from net2net  import *
 
-DH = 200
-N_WORDS = 100000
-SEQ_LENGTH = 50
-N_CLASSES = 10
-N_EXAMPLES = 32
+mSequentialModel = Sequential()
+mSequentialModel.add(Conv2D(64, 3, 3, input_shape=input_shape,
+                 border_mode='same', name='conv1',activation='relu'))
+mSequentialModel.add(MaxPooling2D(name='pool1'))
+mSequentialModel.add(Dropout(0.25))
+mSequentialModel.add(Conv2D(64, 3, 3, border_mode='same', name='conv2',activation='relu'))
+mSequentialModel.add(MaxPooling2D(name='pool2'))
+mSequentialModel.add(Dropout(0.25))
 
-x = np.random.randint(N_WORDS, size=(N_EXAMPLES, SEQ_LENGTH))
-x_test = np.random.randint(N_WORDS, size=(N_EXAMPLES, SEQ_LENGTH))
-y = np.random.randint(N_CLASSES, size=(N_EXAMPLES, 1))
-y = MultiLabelBinarizer().fit_transform(y)  # encode in one-hot
+mSequentialModel.add(Flatten(name='flatten'))
+mSequentialModel.add(Dense(64, activation='relu', name='fc1'))
+mSequentialModel.add(Dropout(0.5))
+mSequentialModel.add(Dense(nb_class, name='fc2'))
 
-print('x.shape:', x.shape)
-print('y.shape:', y.shape)
+image_input=Input(shape=input_shape)
+logits=mSequentialModel(image_input)
+output=Activation('softmax')(logits)
 
-for i in range(10):
-    print('ITERATION {}'.format(i))
+model=Model(input=image_input,output=[logits,output])
 
-    model = Sequential()
-    model.add(Embedding(input_dim=N_WORDS, output_dim=DH, input_length=SEQ_LENGTH))
-    model.add(Dropout(.2))
-    model.add(LSTM(DH))
-    model.add(Dropout(.5))
-    model.add(Dense(N_CLASSES))
-    model.add(Activation('softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer='RMSprop',metrics=["accuracy"])
+model.compile(loss=['mean_squared_error','categorical_crossentropy'],
+              loss_weights=[1,0],
+              optimizer=SGD(lr=0.01, momentum=0.9),
+              metrics=['accuracy'])
+print([l.name for l in model.layers])
 
-    model.fit(x, y, nb_epoch=1)
-    predictions = model.predict(x_test)
-    os.system("nvidia-smi")
+save_model_config(model,"sequential+functional")
 
+model = Sequential()
+model.add(Conv2D(64, 3, 3, input_shape=input_shape,
+                 border_mode='same', name='conv1'))
+model.add(MaxPooling2D(name='pool1'))
+model.add(Conv2D(64, 3, 3, border_mode='same', name='conv2'))
+model.add(MaxPooling2D(name='pool2'))
+model.add(Flatten(name='flatten'))
+model.add(Dense(64, activation='relu', name='fc1'))
+model.add(Dense(nb_class, activation='softmax', name='fc2'))
+model.compile(loss='categorical_crossentropy',
+              optimizer=SGD(lr=0.01, momentum=0.9),
+              metrics=['accuracy'])
+save_model_config(model,"sequential")
 def smooth(x,y):
     print len(x),len(y)
     import matplotlib.pyplot as plt

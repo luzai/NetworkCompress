@@ -3,8 +3,8 @@ from init import *
 
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten
-from keras.models import Sequential, model_from_json
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input,Dropout,Activation
+from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
 from keras.utils import np_utils, visualize_util
 
@@ -18,8 +18,14 @@ csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
 
 
 # load and pre-process data
-def preprocess_input(x):
-    return x.reshape((-1,) + input_shape) / 255.
+def preprocess_input(x,mean_image=None):
+    x=x.reshape((-1,)+input_shape)
+    x=x.astype("float32")
+    if mean_image is None:
+        mean_image=np.mean(x,axis=0)
+    x-=mean_image
+    x/=128.
+    return x,mean_image
 
 
 def preprocess_output(y):
@@ -34,16 +40,15 @@ def load_data(dbg=False):
     transfer_x, transfer_y = get_transfer_data(osp.join(root_dir, "data", "transfer_data"))
     transfer_y = transfer_y.reshape((-1, 1))
     (train_x, train_y), (validation_x, validation_y) = cifar10.load_data()
-
     train_x = np.concatenate((train_x, transfer_x))
     train_y = np.concatenate((train_y, transfer_y))
     # validation_x = np.concatenate((validation_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
     # validation_y = np.concatenate((validation_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
 
-    print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
-    print('validation_x shape:', validation_x.shape,
-          'validation_y shape', validation_y.shape)
-    train_x, validation_x = map(preprocess_input, [train_x, validation_x])
+    '''Train and Test use the same mean img'''
+    train_x,mean_image=preprocess_input(train_x,None)
+    validation_x,_=preprocess_input(validation_x,mean_image)
+    # train_x, validation_x = map(preprocess_input, [train_x, validation_x])
     train_y, validation_y = map(preprocess_output, [train_y, validation_y])
 
     print('Loading data...')
@@ -213,16 +218,28 @@ def copy_weights(teacher_model, student_model, layer_names=None):
 def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
     '''Train a simple CNN as teacher model.
     '''
-    model = Sequential()
-    model.add(Conv2D(64, 3, 3, input_shape=input_shape,
-                     border_mode='same', name='conv1'))
-    model.add(MaxPooling2D(name='pool1'))
-    model.add(Conv2D(64, 3, 3, border_mode='same', name='conv2'))
-    model.add(MaxPooling2D(name='pool2'))
-    model.add(Flatten(name='flatten'))
-    model.add(Dense(64, activation='relu', name='fc1'))
-    model.add(Dense(nb_class, activation='softmax', name='fc2'))
-    model.compile(loss='categorical_crossentropy',
+    mSequentialModel = Sequential()
+    mSequentialModel.add(Conv2D(64, 3, 3, input_shape=input_shape,
+                     border_mode='same', name='conv1',activation='relu'))
+    mSequentialModel.add(MaxPooling2D(name='pool1'))
+    mSequentialModel.add(Dropout(0.25))
+    mSequentialModel.add(Conv2D(64, 3, 3, border_mode='same', name='conv2',activation='relu'))
+    mSequentialModel.add(MaxPooling2D(name='pool2'))
+    mSequentialModel.add(Dropout(0.25))
+
+    mSequentialModel.add(Flatten(name='flatten'))
+    mSequentialModel.add(Dense(64, activation='relu', name='fc1'))
+    mSequentialModel.add(Dropout(0.5))
+    mSequentialModel.add(Dense(nb_class, name='fc2'))
+
+    image_input=Input(shape=input_shape)
+    logits=mSequentialModel(image_input)
+    output=Activation('softmax')(logits)
+
+    model=Model(input=image_input,output=[logits,output])
+
+    model.compile(loss=['mean_squared_error','categorical_crossentropy'],
+                  loss_weights=[1,0],
                   optimizer=SGD(lr=0.01, momentum=0.9),
                   metrics=['accuracy'])
     print([l.name for l in model.layers])
@@ -519,8 +536,26 @@ def make_model(teacher_model, commands, train_data, validation_data):
 
     name = commands[0]
 
-    _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
+    save_model_config(student_model, name)
 
+    _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
+    subprocess.call(_shell_cmd.split())
+    os.chdir(osp.join(root_dir, "output", name))
+
+    with open(name + ".pkl", 'w') as f:
+        cPickle.dump(log, f)
+    with open(name + ".log", "w") as f:
+        for log_item in log:
+            f.write(str(log_item[0]) + "\n")
+            [f.write("\t" + str(log_item_item) + "\n") for log_item_item in log_item[1:]]
+    visualize_util.plot(teacher_model, to_file="teacher.png", show_shapes=True)
+
+    os.chdir("../../src")
+
+    return student_model, log
+
+def save_model_config(student_model, name):
+    _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
     subprocess.call(_shell_cmd.split())
     os.chdir(osp.join(root_dir, "output", name))
     student_model.save_weights(name + ".h5")
@@ -530,17 +565,9 @@ def make_model(teacher_model, commands, train_data, validation_data):
             f,
             indent=2
         )
-    with open(name + ".pkl", 'w') as f:
-        cPickle.dump(log, f)
-    with open(name + ".log", "w") as f:
-        for log_item in log:
-            f.write(str(log_item[0]) + "\n")
-            [f.write("\t" + str(log_item_item) + "\n") for log_item_item in log_item[1:]]
-    visualize_util.plot(teacher_model, to_file="teacher.png", show_shapes=True)
     visualize_util.plot(student_model, to_file=name + '.png', show_shapes=True)
     os.chdir("../../src")
 
-    return student_model, log
 
 
 # def smooth(x, y):

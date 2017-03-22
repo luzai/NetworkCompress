@@ -10,14 +10,15 @@ from __future__ import print_function
 from keras.datasets import cifar10
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils import np_utils
-from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
+from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping, ModelCheckpoint
 import numpy as np
 
 import resnet
 
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
 early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
-csv_logger = CSVLogger('resnet18_cifar10.csv')
+csv_logger = CSVLogger('../output/resnet18_cifar10.csv')
+model_checkpoint = ModelCheckpoint('../model/resnet18_cifar10.model', period = 3)
 
 batch_size = 32
 nb_classes = 10
@@ -58,7 +59,7 @@ if not data_augmentation:
               nb_epoch=nb_epoch,
               validation_data=(X_test, Y_test),
               shuffle=True,
-              callbacks=[lr_reducer, early_stopper, csv_logger])
+              callbacks=[lr_reducer, model_checkpoint, csv_logger])
 else:
     print('Using real-time data augmentation.')
     # This will do preprocessing and realtime data augmentation:
@@ -83,4 +84,4 @@ else:
                         samples_per_epoch=X_train.shape[0],
                         validation_data=(X_test, Y_test),
                         nb_epoch=nb_epoch, verbose=1, max_q_size=100,
-                        callbacks=[lr_reducer, early_stopper, csv_logger])
+                        callbacks=[lr_reducer, model_checkpoint, csv_logger])
