@@ -31,6 +31,7 @@ for i in range(10):
     model.fit(x, y, nb_epoch=1)
     predictions = model.predict(x_test)
     os.system("nvidia-smi")
+
 def smooth(x,y):
     print len(x),len(y)
     import matplotlib.pyplot as plt

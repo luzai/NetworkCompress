@@ -11,20 +11,23 @@ Inspired by net2net, network distillation.
 
 
 ## TODO list:
-- [finish] check the completeness of `net2net.py` `kd.py`  
-- [finish] generate transfer data 
-- generate soft-taget
-- experiments on random generate model
-  - [finish] generate random feasible command 
-  - check the completeness 
-  - run code parallel, find some rule.
+- Use kd loss
+  - [finish] Train(65770): hard label + transfer label; Test(10000): cifar-10 hard label 
+  - use `functional API` rather than `sequence`
+  - hard label + soft-target (tune hyper-parameter T)
 - experiments on  comparing two type models:
-  - discuss and specify the requirements of these two model
   - left --> right , up --> down
   - diag grow
-- verify the utility of soft-target
-  - [finish] hard label + transfer label
-  - hard label + soft-target (tune hyper-parameter T)
+
 - write `net2branch` function, imitating inception module
 - net2deeper for pooling layer
 - net2wider for conv layer on kernel size dimension, i.e., 3X3 to 5X5
+
+## Finish list:
+- [finish] check the completeness of `net2net.py` `kd.py`  
+- [finish] generate transfer data 
+- [finish] generate soft-taget
+- experiments on random generate model
+  - [finish] generate random feasible command 
+  - [finish] check the completeness, run code parallel
+  - find some rules

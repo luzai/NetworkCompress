@@ -520,6 +520,7 @@ def make_model(teacher_model, commands, train_data, validation_data):
     name = commands[0]
 
     _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
+
     subprocess.call(_shell_cmd.split())
     os.chdir(osp.join(root_dir, "output", name))
     student_model.save_weights(name + ".h5")
@@ -572,7 +573,7 @@ def vis(log0, log12, command):
     plt.legend([command[0]])
     # plt.plot(acc0)
     os.chdir(osp.join(root_dir, "output", command[0]))
-    np.save("val_acc.npz", acc_con)
+    np.save("val_acc.npy", acc_con)
     plt.savefig('val_acc.png')
     try:
         plt.show()

@@ -1,10 +1,10 @@
 # xlwang custom
 *.h5
-model/
-output/
+#model/
+#output/
 data/
-example/
-test/
+#example/
+#test/
 .idea/
 
 # Byte-compiled / optimized / DLL files
