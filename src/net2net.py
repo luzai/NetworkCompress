@@ -3,8 +3,8 @@ from init import *
 
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten
-from keras.models import Sequential, model_from_json
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Activation
+from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
 from keras.utils import np_utils, visualize_util
 
@@ -15,12 +15,17 @@ nb_class = 10  # number of class
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
 early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=20)
 csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
-
+batch_szie=128
 
 # load and pre-process data
-def preprocess_input(x):
-    return x.reshape((-1,) + input_shape) / 255.
-
+def preprocess_input(x,mean_image=None):
+    x=x.reshape((-1,)+input_shape)
+    x=x.astype("float32")
+    if mean_image is None:
+        mean_image=np.mean(x,axis=0)
+    x-=mean_image
+    x/=128.
+    return x,mean_image
 
 def preprocess_output(y):
     return np_utils.to_categorical(y, nb_class)
@@ -29,34 +34,48 @@ def preprocess_output(y):
 def limit_data(x):
     return x[:1]  #
 
+def check_data_format(train_data,test_data):
+    print "train_img.shape", train_data[0].shape,\
+        "\ntrain_logits",train_data[1][0].shape,\
+        "\ntrain_label",train_data[1][1].shape
+    print "test_img.shape", test_data[0].shape, \
+        "\ntest_logits", test_data[1][0].shape, \
+        "\ntest_label", test_data[1][1].shape
 
 def load_data(dbg=False):
     transfer_x, transfer_y = get_transfer_data(osp.join(root_dir, "data", "transfer_data"))
     transfer_y = transfer_y.reshape((-1, 1))
-    (train_x, train_y), (validation_x, validation_y) = cifar10.load_data()
-
+    (train_x, train_y), (test_x, test_y) = cifar10.load_data()
     train_x = np.concatenate((train_x, transfer_x))
     train_y = np.concatenate((train_y, transfer_y))
-    # validation_x = np.concatenate((validation_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
-    # validation_y = np.concatenate((validation_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
+    # test_x = np.concatenate((test_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
+    # test_y = np.concatenate((test_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
 
-    print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
-    print('validation_x shape:', validation_x.shape,
-          'validation_y shape', validation_y.shape)
-    train_x, validation_x = map(preprocess_input, [train_x, validation_x])
-    train_y, validation_y = map(preprocess_output, [train_y, validation_y])
+    '''Train and Test use the same mean img'''
+    train_x,mean_image=preprocess_input(train_x,None)
+    test_x,_=preprocess_input(test_x,mean_image)
 
-    print('Loading data...')
-    print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
-    print('validation_x shape:', validation_x.shape,
-          'validation_y shape', validation_y.shape)
-    print("\n\n---------------------------------------\n\n")
+    train_y, test_y = map(preprocess_output, [train_y, test_y])
+
+    train_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_transfer.npy")))
+    test_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_test.npy")))
+    print ('train_logits.shape: ', train_logits.shape)
+    print ('test_logits.shape: ', test_logits.shape)
+
     if dbg:
-        train_x, train_y, validation_x, validation_y = map(limit_data, [train_x, train_y, validation_x, validation_y])
-    train_data = (train_x, train_y)
-    validation_data = (validation_x, validation_y)
+        train_x, train_y, \
+        test_x, test_y,\
+        train_logits,test_logits\
+            = map(limit_data, [train_x, train_y,
+                               test_x, test_y,
+                               train_logits,test_logits]
+                  )
+    train_data = (train_x, [train_logits, train_y])
+    test_data = (test_x, [test_logits, test_y])
+    print("\n\n---------------------------------------\n\n")
+    check_data_format(train_data, test_data)
 
-    return train_data, validation_data
+    return train_data, test_data
 
 
 ## Deprecated
@@ -542,6 +561,39 @@ def make_model(teacher_model, commands, train_data, validation_data):
 
     return student_model, log
 
+def save_model_config(student_model, name):
+    _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
+    subprocess.call(_shell_cmd.split())
+    os.chdir(osp.join(root_dir, "output", name))
+    student_model.save_weights(name + ".h5")
+    with open(name + ".json", "w") as f:
+        json.dump(
+            json.loads(student_model.to_json()),
+            f,
+            indent=2
+        )
+    visualize_util.plot(student_model, to_file=name + '.png', show_shapes=True)
+    os.chdir("../../src")
+
+def shuffle_weights(model, weights=None):
+    """Randomly permute the weights in `model`, or the given `weights`.
+
+    This is a fast approximation of re-initializing the weights of a model.
+
+    Assumes weights are distributed independently of the dimensions of the weight tensors
+      (i.e., the weights have the same distribution along each dimension).
+
+    :param Model model: Modify the weights of the given model.
+    :param list(ndarray) weights: The model's weights will be replaced by a random permutation of these weights.
+      If `None`, permute the model's current weights.
+    """
+    if weights is None:
+        weights = model.get_weights()
+    weights = [np.random.permutation(w.flat).reshape(w.shape) for w in weights]
+    # Faster, but less random: only permutes along the first dimension
+    # weights = [np.random.permutation(w) for w in weights]
+    model.set_weights(weights)
+    return model
 
 # def smooth(x, y):
 #     import matplotlib.pyplot as plt
@@ -575,8 +627,8 @@ def vis(log0, log12, command):
     os.chdir(osp.join(root_dir, "output", command[0]))
     np.save("val_acc.npy", acc_con)
     plt.savefig('val_acc.png')
-    try:
-        plt.show()
-    finally:
-        pass
+    # try:
+    #     plt.show()
+    # finally:
+    #     pass
     os.chdir(osp.join(root_dir, "src"))

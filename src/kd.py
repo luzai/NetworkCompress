@@ -1,7 +1,7 @@
 from __future__ import print_function
 import numpy as np
 np.random.seed(1337)  # for reproducibility
-
+from net2net import  *
 from keras.datasets import cifar10
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense, Dropout, Activation, Flatten
@@ -40,8 +40,8 @@ print('test_x shape: ', test_x.shape)
 print('test_y shape: ', test_y.shape)
 
 #2. read teacher_model's logits
-t_logits_transfer = np.asarray(np.load('../output/resnet18_logits_transfer.npy'))
-t_logits_test = np.asarray(np.load('../output/resnet18_logits_test.npy'))
+t_logits_transfer = np.asarray(np.load('../data/resnet18_logits_transfer.npy'))
+t_logits_test = np.asarray(np.load('../data/resnet18_logits_test.npy'))
 print ('t_logits_transfer.shape: ', t_logits_transfer.shape)
 print ('t_logits_test.shape: ', t_logits_test.shape)
 
@@ -71,5 +71,5 @@ s_model.fit(transfer_x, [t_logits_transfer, transfer_y],
               batch_size=batch_size, nb_epoch=nb_epoch,
               verbose=1,
               validation_data=(test_x, [t_logits_test, test_y]))
-
+save_model_config(s_model,"functional")
 s_model.save('student_1.model')
