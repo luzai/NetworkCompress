@@ -22,14 +22,11 @@ def parse_args():
     return _args
 
 
+
 if __name__ == "__main__":
 
     args = parse_args()
-    train_data, validation_data = load_data(args.dbg)
-    train_logits=np.asarray(np.load(osp.join(root_dir,"data","resnet18_logits_transfer.npy")))
-    test_logits=np.asarray(np.load(osp.join(root_dir,"data","resnet18_logits_test.npy")))
-    print ('t_logits_transfer.shape: ', train_logits.shape)
-    print ('t_logits_test.shape: ', test_logits.shape)
+    train_data, test_data = load_data(args.dbg)
 
     if args.dbg:
         args.nb_epoch = 1
@@ -41,14 +38,14 @@ if __name__ == "__main__":
 
     '''train teacher model'''
     teacher_model, history = make_teacher_model(
-        train_data, validation_data,
+        train_data, test_data,
         args.nb_teacher_epoch,
         args.gl_verbose
     )
     log0 = [[
         "make_teacher",
         [l.name for l in teacher_model.layers],
-        history.history["val_acc"] if history.history else[],
+        history.history["val_logits_acc"] if history.history else[],
     ]]
 
     '''train net2net student model'''
@@ -56,11 +53,11 @@ if __name__ == "__main__":
         "net2net",  # model name
         ["net2wider", "conv1", 2, 0, args.gl_verbose],  # command name, new layer, new width, number of epoch
         ["net2wider", "fc1", 2, 0, args.gl_verbose],
-        ["net2deeper", "conv2", 0, args.gl_verbose],
-        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose]
+        # ["net2deeper", "conv2", 0, args.gl_verbose],
+        # ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose]
     ]
     student_model, log1 = make_model(teacher_model, command,
-                                     train_data, validation_data)
+                                     train_data, test_data)
 
     # '''train random student model'''
     # command = [
@@ -74,6 +71,6 @@ if __name__ == "__main__":
     #                                  train_data, validation_data)
 
     '''print log'''
-    map(lambda x: pprint(x, indent=2), ["\n", log0, "\n", log1])
-
-    vis(log0, [log1],command)
+    # map(lambda x: pprint(x, indent=2), ["\n", log0, "\n", log1])
+    #
+    # vis(log0, [log1],command)

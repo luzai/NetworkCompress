@@ -87,6 +87,7 @@ if __name__ == "__main__":
         history.history["val_acc"] if history.history else[],
     ]]
     for II in range(10):
+        print 'round',II
         '''train net2net student model'''
         layer_names = [l.name for l in teacher_model.layers]
         possible_layer = []

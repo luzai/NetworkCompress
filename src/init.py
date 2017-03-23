@@ -5,6 +5,7 @@ import matplotlib, sys, os, \
     argparse, errno, json,\
     copy, re,time, imp,datetime
 # from operator import add
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np

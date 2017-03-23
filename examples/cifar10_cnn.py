@@ -6,20 +6,9 @@ GPU run command with Theano backend (with TensorFlow, the GPU is automatically u
 It gets down to 0.65 test logloss in 25 epochs, and down to 0.55 after 50 epochs.
 (it's still underfitting at that point, though).
 '''
-from __future__ import print_function
-import matplotlib, sys, os, \
-    glob, cPickle, scipy, \
-    argparse, errno, json,\
-    copy, re,time, imp,datetime
-# from operator import add
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-import os.path as osp
-import scipy.io as sio
-# import xml.etree.ElementTree as ET
-from pprint import pprint
-import subprocess
+import sys
+sys.path.insert(0,"../src")
+from net2net import *
 
 from keras.datasets import cifar10
 from keras.preprocessing.image import ImageDataGenerator
@@ -28,9 +17,9 @@ from keras.layers import Dense, Dropout, Activation, Flatten
 from keras.layers import Convolution2D, MaxPooling2D
 from keras.utils import np_utils
 
-batch_size = 32
+batch_size = 1024
 nb_classes = 10
-nb_epoch = 200 # 3
+nb_epoch = 1000 # 3
 data_augmentation = True
 
 # input image dimensions
@@ -52,10 +41,30 @@ def limit_data(x):
     return x[:]
 
 X_train, Y_train, X_test, Y_test=map(limit_data,[X_train, Y_train, X_test, Y_test])
+X_train = X_train.astype('float32')
+X_test = X_test.astype('float32')
+X_train /= 255
+X_test /= 255
+
+from keras import backend as K
+from keras.layers import Dense
+
+def reset_weights(model):
+    session = K.get_session()
+    for layer in model.layers:
+        if isinstance(layer, Dense):
+            old = layer.get_weights()
+            layer.W.initializer.run(session=session)
+            layer.b.initializer.run(session=session)
+            print(np.array_equal(old, layer.get_weights())," after initializer run")
+        else:
+            print(layer, "not reinitialized")
 
 sav=[]
-for use_dropout in [True, False]:
-    for data_augmentation in [True,False]:
+for use_dropout in [False]:
+    for data_augmentation in [False]:
+        if 'model' in locals():
+            del model
         model = Sequential()
 
         model.add(Convolution2D(32, 3, 3, border_mode='same',
@@ -64,19 +73,22 @@ for use_dropout in [True, False]:
         model.add(Convolution2D(32, 3, 3))
         model.add(Activation('relu'))
         model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Dropout(0.25)) if use_dropout else []
+        if use_dropout:
+            model.add(Dropout(0.25))
 
         model.add(Convolution2D(64, 3, 3, border_mode='same'))
         model.add(Activation('relu'))
         model.add(Convolution2D(64, 3, 3))
         model.add(Activation('relu'))
         model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Dropout(0.25)) if use_dropout else []
+        if use_dropout:
+            model.add(Dropout(0.25))
 
         model.add(Flatten())
         model.add(Dense(512))
         model.add(Activation('relu'))
-        model.add(Dropout(0.5)) if use_dropout else []
+        if use_dropout:
+            model.add(Dropout(0.5))
         model.add(Dense(nb_classes))
         model.add(Activation('softmax'))
 
@@ -84,11 +96,10 @@ for use_dropout in [True, False]:
         model.compile(loss='categorical_crossentropy',
                       optimizer='rmsprop',
                       metrics=['accuracy'])
+        # print(model.get_weights())
+        model.summary()
+        model=shuffle_weights(model)
 
-        X_train = X_train.astype('float32')
-        X_test = X_test.astype('float32')
-        X_train /= 255
-        X_test /= 255
 
         if not data_augmentation:
             print('Not using data augmentation.')
@@ -96,7 +107,7 @@ for use_dropout in [True, False]:
                       batch_size=batch_size,
                       nb_epoch=nb_epoch,
                       validation_data=(X_test, Y_test),
-                      shuffle=True)
+                      shuffle=True,verbose=2)
         else:
             print('Using real-time data augmentation.')
             # This will do preprocessing and realtime data augmentation:
@@ -121,12 +132,16 @@ for use_dropout in [True, False]:
                                              batch_size=batch_size),
                                 samples_per_epoch=X_train.shape[0],
                                 nb_epoch=nb_epoch,
-                                validation_data=(X_test, Y_test))
+                                validation_data=(X_test, Y_test),
+                                        verbose=2)
         print([0]+history.history['val_acc'])
-        sav+=[history.history['val_acc']]
+        sav+=[[0]+history.history['val_acc']]
 
-print(sav)
+pprint(sav)
+np.save("acc.npy",sav)
 for acc in sav:
     plt.plot(acc)
+
 plt.legend(["dropout+agu","dp","agu","neither"])
+plt.show()
 plt.savefig("acc.png")

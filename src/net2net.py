@@ -12,10 +12,13 @@ from load_transfer_data import get_transfer_data
 
 input_shape = (3, 32, 32)  # image shape
 nb_class = 10  # number of class
-lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
-early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=20)
+lr_reducer = ReduceLROnPlateau(monitor='val_logits_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
+early_stopper = EarlyStopping(monitor='val_logits_acc', min_delta=0.001, patience=20)
 csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
+batch_size=128
 
+def limit_data(x):
+    return x[:1]  #
 
 # load and pre-process data
 def preprocess_input(x,mean_image=None):
@@ -31,37 +34,49 @@ def preprocess_input(x,mean_image=None):
 def preprocess_output(y):
     return np_utils.to_categorical(y, nb_class)
 
-
-def limit_data(x):
-    return x[:1]  #
+def check_data_format(train_data,test_data):
+    print "train_img.shape", train_data[0].shape,\
+        "\ntrain_logits",train_data[1][0].shape,\
+        "\ntrain_label",train_data[1][1].shape
+    print "test_img.shape", test_data[0].shape, \
+        "\ntest_logits", test_data[1][0].shape, \
+        "\ntest_label", test_data[1][1].shape
 
 
 def load_data(dbg=False):
     transfer_x, transfer_y = get_transfer_data(osp.join(root_dir, "data", "transfer_data"))
     transfer_y = transfer_y.reshape((-1, 1))
-    (train_x, train_y), (validation_x, validation_y) = cifar10.load_data()
+    (train_x, train_y), (test_x, test_y) = cifar10.load_data()
     train_x = np.concatenate((train_x, transfer_x))
     train_y = np.concatenate((train_y, transfer_y))
-    # validation_x = np.concatenate((validation_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
-    # validation_y = np.concatenate((validation_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
+    # test_x = np.concatenate((test_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
+    # test_y = np.concatenate((test_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
 
     '''Train and Test use the same mean img'''
     train_x,mean_image=preprocess_input(train_x,None)
-    validation_x,_=preprocess_input(validation_x,mean_image)
-    # train_x, validation_x = map(preprocess_input, [train_x, validation_x])
-    train_y, validation_y = map(preprocess_output, [train_y, validation_y])
+    test_x,_=preprocess_input(test_x,mean_image)
 
-    print('Loading data...')
-    print('train_x shape:', train_x.shape, 'train_y shape:', train_y.shape)
-    print('validation_x shape:', validation_x.shape,
-          'validation_y shape', validation_y.shape)
-    print("\n\n---------------------------------------\n\n")
+    train_y, test_y = map(preprocess_output, [train_y, test_y])
+
+    train_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_transfer.npy")))
+    test_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_test.npy")))
+    print ('train_logits.shape: ', train_logits.shape)
+    print ('test_logits.shape: ', test_logits.shape)
+
     if dbg:
-        train_x, train_y, validation_x, validation_y = map(limit_data, [train_x, train_y, validation_x, validation_y])
-    train_data = (train_x, train_y)
-    validation_data = (validation_x, validation_y)
+        train_x, train_y, \
+        test_x, test_y,\
+        train_logits,test_logits\
+            = map(limit_data, [train_x, train_y,
+                               test_x, test_y,
+                               train_logits,test_logits]
+                  )
+    train_data = (train_x, [train_logits, train_y])
+    test_data = (test_x, [test_logits, test_y])
+    print("\n\n---------------------------------------\n\n")
+    check_data_format(train_data, test_data)
 
-    return train_data, validation_data
+    return train_data, test_data
 
 
 ## Deprecated
@@ -215,26 +230,26 @@ def copy_weights(teacher_model, student_model, layer_names=None):
     '''
 
 
-def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
+def make_teacher_model(train_data, test_data, nb_epoch, verbose):
     '''Train a simple CNN as teacher model.
     '''
-    mSequentialModel = Sequential()
-    mSequentialModel.add(Conv2D(64, 3, 3, input_shape=input_shape,
-                     border_mode='same', name='conv1',activation='relu'))
-    mSequentialModel.add(MaxPooling2D(name='pool1'))
-    mSequentialModel.add(Dropout(0.25))
-    mSequentialModel.add(Conv2D(64, 3, 3, border_mode='same', name='conv2',activation='relu'))
-    mSequentialModel.add(MaxPooling2D(name='pool2'))
-    mSequentialModel.add(Dropout(0.25))
-
-    mSequentialModel.add(Flatten(name='flatten'))
-    mSequentialModel.add(Dense(64, activation='relu', name='fc1'))
-    mSequentialModel.add(Dropout(0.5))
-    mSequentialModel.add(Dense(nb_class, name='fc2'))
 
     image_input=Input(shape=input_shape)
-    logits=mSequentialModel(image_input)
-    output=Activation('softmax')(logits)
+
+    conv1=Conv2D(64, 3, 3,
+        border_mode='same', name='conv1', activation='relu')(image_input)
+    pool1=MaxPooling2D(name='pool1')(conv1)
+    drop1=Dropout(0.25)(pool1)
+
+    conv2=Conv2D(64, 3, 3, border_mode='same', name='conv2', activation='relu')(drop1)
+    pool2=MaxPooling2D(name='pool2')(conv2)
+    drop2=Dropout(0.25)(pool2)
+
+    flatten=Flatten(name='flatten')(drop2)
+    fc1=Dense(64, activation='relu', name='fc1')(flatten)
+    fc1_drop1=Dropout(0.5)(fc1)
+    logits=Dense(nb_class, name='logits')(fc1_drop1)
+    output=Activation('softmax',name='softmax')(logits)
 
     model=Model(input=image_input,output=[logits,output])
 
@@ -243,38 +258,64 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
                   optimizer=SGD(lr=0.01, momentum=0.9),
                   metrics=['accuracy'])
     print([l.name for l in model.layers])
-
+    # save_model_config(model, "functional")
     history = model.fit(
-        *(train_data),
+        train_data[0],train_data[1],
         nb_epoch=nb_epoch,
-        validation_data=validation_data,
-        verbose=verbose if verbose != 0 else 0,
-        callbacks=[lr_reducer, early_stopper, csv_logger]
+        validation_data=test_data,
+        verbose=verbose,
+        callbacks=[lr_reducer, early_stopper, csv_logger],
+        batch_size=batch_size
     )
-    # print acc_hist.accs
+    # print history.history
     return model, history
+
+def get_name_ind_map(student_model_dict):
+    name2ind = {student_model_dict["config"]["layers"][i]["config"]["name"]: i
+                for i in range(len(student_model_dict["config"]["layers"]))}
+    ind2name = [student_model_dict["config"]["layers"][i]["config"]["name"]
+                for i in range(len(student_model_dict["config"]["layers"]))]
+    return name2ind,ind2name
+
+def get_config(dict,modify_layer,property):
+    name2ind, ind2name = get_name_ind_map(dict)
+    if dict["class_name"]=="Model":
+        if isinstance(modify_layer,basestring):
+            modify_layer_ind=name2ind[modify_layer]
+        else:
+            modify_layer_ind=modify_layer
+        return dict["config"]["layers"][modify_layer_ind]["config"][property]
+    else:
+        # Sequential Deprecated
+        pass
+
+def set_config(dict,modify_layer,property,value):
+    name2ind, ind2name = get_name_ind_map(dict)
+    if dict["class_name"] == "Model":
+        if isinstance(modify_layer, basestring):
+            modify_layer_ind = name2ind[modify_layer]
+        else:
+            modify_layer_ind = modify_layer
+        dict["config"]["layers"][modify_layer_ind]["config"][property]=value
+    else:
+        # Sequential Deprecated
+        pass
 
 
 def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_dict):
     student_model_dict = copy.deepcopy(teacher_model_dict)
     # student_model_dict=teacher_model_dict
-    name2ind = {student_model_dict["config"][i]["config"]["name"]: i
-                for i in range(len(student_model_dict["config"]))}
-    ind2name = [student_model_dict["config"][i]["config"]["name"]
-                for i in range(len(student_model_dict["config"]))]
 
-    modify_layer_ind = name2ind[modify_layer_name]
     CONV_WIDTH_LIMITS = 512
     new_conv1_width = min(
         CONV_WIDTH_LIMITS,
         int(
             new_conv1_width_ratio
-            * student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"]
+            * get_config(student_model_dict,modify_layer_name,"nb_filter")
         )
     )
-
-    student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"] = new_conv1_width
-
+    set_config(student_model_dict,modify_layer_name,"nb_filter",new_conv1_width)
+    # No need:
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
     return student_model_dict, new_conv1_width, new_conv1_width == CONV_WIDTH_LIMITS
 
@@ -282,7 +323,7 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
 def to_uniform_init_dict(student_model_dict):
     # need to be add when dropout needed
     # but I add it now
-    for layer in student_model_dict["config"]:
+    for layer in student_model_dict["config"]["layers"]:
         if layer["class_name"] == "Dense":
             layer["config"]["init"] = "glorot_uniform"
     return student_model_dict
@@ -290,22 +331,17 @@ def to_uniform_init_dict(student_model_dict):
 
 
 def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
+    student_model_dict=copy.deepcopy(teacher_model_dict)
     # student_model_dict=teacher_model_dict
-    student_model_dict = copy.deepcopy(teacher_model_dict)
-    name2ind = {student_model_dict["config"][i]["config"]["name"]: i
-                for i in
-                range(len(student_model_dict["config"]))}
-    ind2name = [student_model_dict["config"][i]["config"]["name"]
-                for i in range(len(student_model_dict["config"]))]
-    modify_layer_ind = name2ind[modify_layer_name]
     FC_WIDTH_LIMITS = 4096
-    old_fc1_width=new_fc1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["output_dim"]
+    old_fc1_width=new_fc1_width_ratio * \
+                    get_config(student_model_dict,modify_layer_name,"output_dim")
     new_fc1_width = min(
         FC_WIDTH_LIMITS,
         int(old_fc1_width)
     )
-    student_model_dict["config"][modify_layer_ind]["config"]["output_dim"] = new_fc1_width
-    student_model_dict["config"][modify_layer_ind]["config"]["init"] = "glorot_uniform"
+    set_config(student_model_dict,modify_layer_name,"output_dim",new_fc1_width)
+    set_config(student_model_dict,modify_layer_name,"init","glorot_uniform")
     # student_model_dict["config"][modify_layer_ind+1]["config"]["init"] = "glorot_uniform"
     student_model_dict = to_uniform_init_dict(student_model_dict)
     # automated!
@@ -315,15 +351,15 @@ def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
 
 
 def reorder_dict(d):
-    len_of_d = len(d["config"])
-    name2ind = {d["config"][i]["config"]["name"]: i
-                for i in range(len(d["config"]))}
-    names = [d["config"][i]["config"]["name"]
-             for i in range(len(d["config"]))]
+    name2ind,names=get_name_ind_map(d)
+    len_of_d = len(names)
 
     for i, v in enumerate(names):
-        if re.findall(r"_", v): break
+        if re.findall(r"conv\d+_\d+", v) or \
+            re.findall(r"fc\d+_\d+",v):
+            break
     type = re.findall(r"[a-z]+", names[i])[0]
+    assert type=="conv" or type=="fc"
     # ind=int(re.findall(r"\d+",names[i])[0])
     start = 1
     for i, v in enumerate(names):
@@ -332,15 +368,19 @@ def reorder_dict(d):
             names[i] = type + str(start)
             start += 1
     for i in range(len_of_d):
-        d["config"][i]["config"]["name"] = names[i]
+        set_config(d,i,"name",names[i])
+    print names,get_name_ind_map(d)
     return d
 
 
 def reorder_list(layers):
     name2ind = {v: i for i, v in enumerate(layers)}
     for i, v in enumerate(layers):
-        if re.findall(r"_", v): break
+        if re.findall(r"conv\d+_\d+", v) or \
+            re.findall(r"fc\d+_\d+",v):
+            break
     layer_type = re.findall(r"[a-z]+", layers[i])[0]
+    assert layer_type == "conv" or layer_type == "fc"
     start = 1
     for i, v in enumerate(layers):
         now_layer_type = re.findall(r"[a-z]+", v)[0]
@@ -354,9 +394,10 @@ def reorder_model(model):
     names = [l.name for l in model.layers]
     len_of_model = len(names)
     names2ind = {v: i for i, v in enumerate(names)}
-
     for i, v in enumerate(names):
-        if re.findall(r"_", v): break
+        if re.findall(r"conv\d+_\d+", v) or \
+            re.findall(r"fc\d+_\d+",v):
+            break
     type = re.findall(r"[a-z]+", names[i])[0]
     start = 1
     for i, v in enumerate(names):
@@ -376,19 +417,22 @@ def make_wider_student_model(teacher_model,
        with either 'random-pad' (baseline) or 'net2wider'
     '''
     new_type = re.findall(r"[a-z]+", new_name)[0]
+    assert new_type=="conv" or new_type=="fc"
     new_ind = re.findall(r"\d+", new_name)[0]
     new_ind = int(new_ind)
     teacher_model_dict = json.loads(teacher_model.to_json())
     if new_type == "conv":
 
         new_conv1_name = new_name
-        student_model_dict, new_conv1_width, return_flag = wider_conv2d_dict(new_width_ratio, new_conv1_name,
+        student_model_dict, new_conv1_width, return_flag \
+            = wider_conv2d_dict(new_width_ratio, new_conv1_name,
                                                                              teacher_model_dict)
 
     elif new_type == "fc":
 
         new_fc1_name = new_name
-        student_model_dict, new_fc1_width, return_flag = wider_fc_dict(new_width_ratio, new_fc1_name,
+        student_model_dict, new_fc1_width, return_flag \
+            = wider_fc_dict(new_width_ratio, new_fc1_name,
                                                                        teacher_model_dict)
     if return_flag:
         return teacher_model, None
@@ -440,24 +484,23 @@ def make_deeper_student_model(teacher_model,
        with either 'random-init' (baseline) or 'net2deeper'
     '''
     new_type = re.findall(r"[a-z]+", new_name)[0]
-    new_ind = re.findall(r"\d+", new_name)[0]
-    new_ind = int(new_ind)
+    new_ind = int(re.findall(r"\d+", new_name)[0])
+
     teacher_model_dict = json.loads(teacher_model.to_json())
     student_model_dict = copy.deepcopy(teacher_model_dict)
+    name2ind,ind2name=get_name_ind_map(student_model_dict)
 
-    name2ind = {student_model_dict["config"][i]["config"]["name"]: i
-                for i in range(len(student_model_dict["config"]))}
-    ind2name = [student_model_dict["config"][i]["config"]["name"]
-                for i in range(len(student_model_dict["config"]))]
-    student_new_layer = copy.deepcopy(student_model_dict["config"][name2ind[new_name]])
+    student_new_layer = copy.deepcopy(student_model_dict["config"]["layers"][name2ind[new_name]])
     student_new_layer["config"]["name"] = new_name + "_1"
     if new_type == "conv":
-        # student_new_layer["config"]["nb_filter"] NO NEED
+        # student_new_layer["config"]["nb_filter"] # NO NEED
         pass
     elif new_type == "fc":
         student_new_layer["config"]["init"] = "identity"
-    student_model_dict["config"].insert(name2ind[new_name] + 1, student_new_layer)
-    # student_model_dict=reorder_dict(student_model_dict)
+    '''Insert new layer'''
+
+    student_model_dict["config"]["layer"].insert(name2ind[new_name] + 1, student_new_layer)
+
 
     model = model_from_json(json.dumps(student_model_dict))
 
@@ -499,6 +542,7 @@ def copy_model(model):
 
 def make_model(teacher_model, commands, train_data, validation_data):
     student_model = copy_model(teacher_model)
+    student_model=shuffle_weights(student_model)
     log = []
     print "\n\n------------------------------\n\n"
 
@@ -568,7 +612,25 @@ def save_model_config(student_model, name):
     visualize_util.plot(student_model, to_file=name + '.png', show_shapes=True)
     os.chdir("../../src")
 
+def shuffle_weights(model, weights=None):
+    """Randomly permute the weights in `model`, or the given `weights`.
 
+    This is a fast approximation of re-initializing the weights of a model.
+
+    Assumes weights are distributed independently of the dimensions of the weight tensors
+      (i.e., the weights have the same distribution along each dimension).
+
+    :param Model model: Modify the weights of the given model.
+    :param list(ndarray) weights: The model's weights will be replaced by a random permutation of these weights.
+      If `None`, permute the model's current weights.
+    """
+    if weights is None:
+        weights = model.get_weights()
+    weights = [np.random.permutation(w.flat).reshape(w.shape) for w in weights]
+    # Faster, but less random: only permutes along the first dimension
+    # weights = [np.random.permutation(w) for w in weights]
+    model.set_weights(weights)
+    return model
 
 # def smooth(x, y):
 #     import matplotlib.pyplot as plt
@@ -602,8 +664,9 @@ def vis(log0, log12, command):
     os.chdir(osp.join(root_dir, "output", command[0]))
     np.save("val_acc.npy", acc_con)
     plt.savefig('val_acc.png')
-    try:
-        plt.show()
-    finally:
-        pass
+
+    # try:
+    #     plt.show()
+    # finally:
+    #     pass
     os.chdir(osp.join(root_dir, "src"))
