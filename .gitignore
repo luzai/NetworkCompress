@@ -1,5 +1,6 @@
 # xlwang custom
 *.h5
+*.npy
 #model/
 #output/
 data/

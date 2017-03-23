@@ -1,0 +1,228 @@
+{
+  "class_name": "Model", 
+  "keras_version": "1.2.2", 
+  "config": {
+    "layers": [
+      {
+        "class_name": "InputLayer", 
+        "inbound_nodes": [], 
+        "config": {
+          "batch_input_shape": [
+            null, 
+            3, 
+            32, 
+            32
+          ], 
+          "sparse": false, 
+          "input_dtype": "float32", 
+          "name": "input_1"
+        }, 
+        "name": "input_1"
+      }, 
+      {
+        "class_name": "Convolution2D", 
+        "inbound_nodes": [
+          [
+            [
+              "input_1", 
+              0, 
+              0
+            ]
+          ]
+        ], 
+        "config": {
+          "W_constraint": null, 
+          "b_constraint": null, 
+          "name": "convolution2d_1", 
+          "activity_regularizer": null, 
+          "trainable": true, 
+          "dim_ordering": "th", 
+          "nb_col": 3, 
+          "subsample": [
+            1, 
+            1
+          ], 
+          "init": "glorot_uniform", 
+          "bias": true, 
+          "nb_filter": 64, 
+          "b_regularizer": null, 
+          "W_regularizer": null, 
+          "nb_row": 3, 
+          "activation": "relu", 
+          "border_mode": "valid"
+        }, 
+        "name": "convolution2d_1"
+      }, 
+      {
+        "class_name": "Convolution2D", 
+        "inbound_nodes": [
+          [
+            [
+              "convolution2d_1", 
+              0, 
+              0
+            ]
+          ]
+        ], 
+        "config": {
+          "W_constraint": null, 
+          "b_constraint": null, 
+          "name": "convolution2d_2", 
+          "activity_regularizer": null, 
+          "trainable": true, 
+          "dim_ordering": "th", 
+          "nb_col": 3, 
+          "subsample": [
+            1, 
+            1
+          ], 
+          "init": "glorot_uniform", 
+          "bias": true, 
+          "nb_filter": 128, 
+          "b_regularizer": null, 
+          "W_regularizer": null, 
+          "nb_row": 3, 
+          "activation": "relu", 
+          "border_mode": "valid"
+        }, 
+        "name": "convolution2d_2"
+      }, 
+      {
+        "class_name": "MaxPooling2D", 
+        "inbound_nodes": [
+          [
+            [
+              "convolution2d_2", 
+              0, 
+              0
+            ]
+          ]
+        ], 
+        "config": {
+          "name": "maxpooling2d_1", 
+          "trainable": true, 
+          "dim_ordering": "th", 
+          "pool_size": [
+            2, 
+            2
+          ], 
+          "strides": [
+            2, 
+            2
+          ], 
+          "border_mode": "valid"
+        }, 
+        "name": "maxpooling2d_1"
+      }, 
+      {
+        "class_name": "Flatten", 
+        "inbound_nodes": [
+          [
+            [
+              "maxpooling2d_1", 
+              0, 
+              0
+            ]
+          ]
+        ], 
+        "config": {
+          "trainable": true, 
+          "name": "flatten_1"
+        }, 
+        "name": "flatten_1"
+      }, 
+      {
+        "class_name": "Dense", 
+        "inbound_nodes": [
+          [
+            [
+              "flatten_1", 
+              0, 
+              0
+            ]
+          ]
+        ], 
+        "config": {
+          "W_constraint": null, 
+          "b_constraint": null, 
+          "name": "dense_1", 
+          "activity_regularizer": null, 
+          "trainable": true, 
+          "init": "glorot_uniform", 
+          "bias": true, 
+          "input_dim": 25088, 
+          "b_regularizer": null, 
+          "W_regularizer": null, 
+          "activation": "relu", 
+          "output_dim": 256
+        }, 
+        "name": "dense_1"
+      }, 
+      {
+        "class_name": "Dense", 
+        "inbound_nodes": [
+          [
+            [
+              "dense_1", 
+              0, 
+              0
+            ]
+          ]
+        ], 
+        "config": {
+          "W_constraint": null, 
+          "b_constraint": null, 
+          "name": "dense_2", 
+          "activity_regularizer": null, 
+          "trainable": true, 
+          "init": "glorot_uniform", 
+          "bias": true, 
+          "input_dim": 256, 
+          "b_regularizer": null, 
+          "W_regularizer": null, 
+          "activation": "linear", 
+          "output_dim": 10
+        }, 
+        "name": "dense_2"
+      }, 
+      {
+        "class_name": "Activation", 
+        "inbound_nodes": [
+          [
+            [
+              "dense_2", 
+              0, 
+              0
+            ]
+          ]
+        ], 
+        "config": {
+          "activation": "softmax", 
+          "trainable": true, 
+          "name": "activation_1"
+        }, 
+        "name": "activation_1"
+      }
+    ], 
+    "input_layers": [
+      [
+        "input_1", 
+        0, 
+        0
+      ]
+    ], 
+    "name": "model_1", 
+    "output_layers": [
+      [
+        "dense_2", 
+        0, 
+        0
+      ], 
+      [
+        "activation_1", 
+        0, 
+        0
+      ]
+    ]
+  }
+}
