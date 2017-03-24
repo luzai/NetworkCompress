@@ -1,0 +1,208 @@
+{
+  "class_name": "Sequential", 
+  "keras_version": "1.2.2", 
+  "config": [
+    {
+      "class_name": "Convolution2D", 
+      "config": {
+        "W_constraint": null, 
+        "b_constraint": null, 
+        "name": "conv1", 
+        "activity_regularizer": null, 
+        "trainable": true, 
+        "dim_ordering": "th", 
+        "nb_col": 3, 
+        "subsample": [
+          1, 
+          1
+        ], 
+        "init": "glorot_uniform", 
+        "bias": true, 
+        "nb_filter": 111, 
+        "activation": "linear", 
+        "input_dtype": "float32", 
+        "b_regularizer": null, 
+        "W_regularizer": null, 
+        "nb_row": 3, 
+        "batch_input_shape": [
+          null, 
+          3, 
+          32, 
+          32
+        ], 
+        "border_mode": "same"
+      }
+    }, 
+    {
+      "class_name": "Convolution2D", 
+      "config": {
+        "W_constraint": null, 
+        "b_constraint": null, 
+        "name": "conv2", 
+        "activity_regularizer": null, 
+        "trainable": true, 
+        "dim_ordering": "th", 
+        "nb_col": 3, 
+        "subsample": [
+          1, 
+          1
+        ], 
+        "init": "glorot_uniform", 
+        "bias": true, 
+        "nb_filter": 111, 
+        "activation": "linear", 
+        "input_dtype": "float32", 
+        "b_regularizer": null, 
+        "W_regularizer": null, 
+        "nb_row": 3, 
+        "batch_input_shape": [
+          null, 
+          3, 
+          32, 
+          32
+        ], 
+        "border_mode": "same"
+      }
+    }, 
+    {
+      "class_name": "Convolution2D", 
+      "config": {
+        "W_constraint": null, 
+        "b_constraint": null, 
+        "name": "conv3", 
+        "activity_regularizer": null, 
+        "trainable": true, 
+        "dim_ordering": "th", 
+        "nb_col": 3, 
+        "subsample": [
+          1, 
+          1
+        ], 
+        "init": "glorot_uniform", 
+        "bias": true, 
+        "nb_filter": 64, 
+        "activation": "linear", 
+        "input_dtype": "float32", 
+        "b_regularizer": null, 
+        "W_regularizer": null, 
+        "nb_row": 3, 
+        "batch_input_shape": [
+          null, 
+          3, 
+          32, 
+          32
+        ], 
+        "border_mode": "same"
+      }
+    }, 
+    {
+      "class_name": "MaxPooling2D", 
+      "config": {
+        "name": "pool1", 
+        "trainable": true, 
+        "dim_ordering": "th", 
+        "pool_size": [
+          2, 
+          2
+        ], 
+        "strides": [
+          2, 
+          2
+        ], 
+        "border_mode": "valid"
+      }
+    }, 
+    {
+      "class_name": "Convolution2D", 
+      "config": {
+        "W_constraint": null, 
+        "b_constraint": null, 
+        "name": "conv4", 
+        "activity_regularizer": null, 
+        "trainable": true, 
+        "dim_ordering": "th", 
+        "nb_col": 3, 
+        "subsample": [
+          1, 
+          1
+        ], 
+        "init": "glorot_uniform", 
+        "bias": true, 
+        "nb_filter": 64, 
+        "b_regularizer": null, 
+        "W_regularizer": null, 
+        "nb_row": 3, 
+        "activation": "linear", 
+        "border_mode": "same"
+      }
+    }, 
+    {
+      "class_name": "MaxPooling2D", 
+      "config": {
+        "name": "pool2", 
+        "trainable": true, 
+        "dim_ordering": "th", 
+        "pool_size": [
+          2, 
+          2
+        ], 
+        "strides": [
+          2, 
+          2
+        ], 
+        "border_mode": "valid"
+      }
+    }, 
+    {
+      "class_name": "Flatten", 
+      "config": {
+        "trainable": true, 
+        "name": "flatten"
+      }
+    }, 
+    {
+      "class_name": "Dense", 
+      "config": {
+        "W_constraint": null, 
+        "b_constraint": null, 
+        "name": "fc1", 
+        "activity_regularizer": null, 
+        "trainable": true, 
+        "init": "glorot_uniform", 
+        "bias": true, 
+        "activation": "relu", 
+        "input_dtype": "float32", 
+        "input_dim": 4096, 
+        "b_regularizer": null, 
+        "W_regularizer": null, 
+        "output_dim": 64, 
+        "batch_input_shape": [
+          null, 
+          4096
+        ]
+      }
+    }, 
+    {
+      "class_name": "Dense", 
+      "config": {
+        "W_constraint": null, 
+        "b_constraint": null, 
+        "name": "fc2", 
+        "activity_regularizer": null, 
+        "trainable": true, 
+        "init": "glorot_uniform", 
+        "bias": true, 
+        "activation": "softmax", 
+        "input_dtype": "float32", 
+        "input_dim": 64, 
+        "b_regularizer": null, 
+        "W_regularizer": null, 
+        "output_dim": 10, 
+        "batch_input_shape": [
+          null, 
+          64
+        ]
+      }
+    }
+  ]
+}
