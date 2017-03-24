@@ -54,4 +54,12 @@ if __name__ == "__main__":
         history.history["val_acc"] if history.history else[],
     ]]
 
-
+    command = [
+        "net2net",  # model name
+        ["net2wider", "conv1", 2, 0, args.gl_verbose],  # command name, new layer, new width, number of epoch
+        ["net2wider", "fc1", 2, 0, args.gl_verbose],
+        ["net2deeper", "conv2", 0, args.gl_verbose],
+        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose]
+    ]
+    student_model, log1 = make_model(teacher_model, command,
+                                     train_data, validation_data)

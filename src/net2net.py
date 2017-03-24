@@ -257,20 +257,20 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
     model.add(Conv2D(64, 3, 3, input_shape=input_shape,
                      border_mode='same', name='conv1',activation="relu"))
     model.add(MaxPooling2D(name='pool1'))
-    model.add(Dropout(0.25,name='conv_drop1'))
+    # model.add(Dropout(0.25,name='conv_drop1'))
     model.add(Conv2D(64, 3, 3, border_mode='same', name='conv2',activation="relu"))
     model.add(MaxPooling2D(name='pool2'))
-    model.add(Dropout(0.25,name='conv_drop2'))
+    # model.add(Dropout(0.25,name='conv_drop2'))
     model.add(Flatten(name='flatten'))
     model.add(Dense(64, activation='relu', name='fc1'))
-    model.add(Dropout(0.5,name="fc_drop1"))
+    # model.add(Dropout(0.5,name="fc_drop1"))
     model.add(Dense(nb_class, activation='softmax', name='fc2'))
     model.compile(loss='categorical_crossentropy',
                   optimizer=SGD(lr=0.01, momentum=0.9),
                   metrics=['accuracy'])
     shuffle_weights(model)
     print([l.name for l in model.layers])
-
+    # save_model_config(model,"sequential")
     history = model.fit(
         *(train_data),
         nb_epoch=nb_epoch,
@@ -278,7 +278,7 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
         verbose=verbose,
         callbacks=[lr_reducer, early_stopper, csv_logger]
     )
-    # print acc_hist.accs
+
     return model, history
 
 
@@ -314,7 +314,11 @@ def to_uniform_init_dict(student_model_dict):
             layer["config"]["init"] = "glorot_uniform"
     return student_model_dict
     # pass
-
+def to_last_layer_softmax(dict):
+    for layer in dict["config"][:-1]:
+        if layer["class_name"]=="Dense" :
+            layer["config"]["activation"]="relu"
+    dict["config"][-1]["config"]["activation"]="softmax"
 
 def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     # student_model_dict=teacher_model_dict
@@ -340,38 +344,41 @@ def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     # student_model_dict["config"][modify_layer_ind + 1]["config"]["batch_input_shape"]=[None,new_fc1_width]
     return student_model_dict, new_fc1_width, new_fc1_width == FC_WIDTH_LIMITS or old_fc1_width == new_fc1_width
 
-
-def reorder_dict(d):
-    len_of_d = len(d["config"])
-    name2ind = {d["config"][i]["config"]["name"]: i
-                for i in range(len(d["config"]))}
-    names = [d["config"][i]["config"]["name"]
-             for i in range(len(d["config"]))]
-
-    for i, v in enumerate(names):
-        if re.findall(r"conv\d+_\d+", v) or \
-                re.findall(r"fc\d+_\d+", v):
-            break
-    type = re.findall(r"[a-z]+", names[i])[0]
-    # ind=int(re.findall(r"\d+",names[i])[0])
-    start = 1
-    for i, v in enumerate(names):
-        now_type = re.findall(r"[a-z]+", v)[0]
-        if now_type == type:
-            names[i] = type + str(start)
-            start += 1
-    for i in range(len_of_d):
-        d["config"][i]["config"]["name"] = names[i]
-    return d
+## not being use
+# def reorder_dict(d):
+#     len_of_d = len(d["config"])
+#     name2ind = {d["config"][i]["config"]["name"]: i
+#                 for i in range(len(d["config"]))}
+#     names = [d["config"][i]["config"]["name"]
+#              for i in range(len(d["config"]))]
+#
+#     for i, v in enumerate(names):
+#         if re.findall(r"conv\d+_\d+", v) or \
+#                 re.findall(r"fc\d+_\d+", v):
+#             break
+#     type = re.findall(r"[a-z]+", names[i])[0]
+#     # ind=int(re.findall(r"\d+",names[i])[0])
+#     start = 1
+#     for i, v in enumerate(names):
+#         now_type = re.findall(r"[a-z]+", v)[0]
+#         if now_type == type:
+#             names[i] = type + str(start)
+#             start += 1
+#     for i in range(len_of_d):
+#         d["config"][i]["config"]["name"] = names[i]
+#     return d
 
 
 def reorder_list(layers):
     name2ind = {v: i for i, v in enumerate(layers)}
     for i, v in enumerate(layers):
-        if re.findall(r"conv\d+_\d+", v) or \
-                re.findall(r"fc\d+_\d+", v):
+        # if re.findall(r"conv\d+_\d+", v) or \
+        #         re.findall(r"fc\d+_\d+", v):
+        #     break
+        if v[0:2]=="^_":
             break
     layer_type = re.findall(r"[a-z]+", layers[i])[0]
+    assert layer_type=="conv" or layer_type=="fc"
     start = 1
     for i, v in enumerate(layers):
         now_layer_type = re.findall(r"[a-z]+", v)[0]
@@ -387,10 +394,13 @@ def reorder_model(model):
     names2ind = {v: i for i, v in enumerate(names)}
 
     for i, v in enumerate(names):
-        if re.findall(r"conv\d+_\d+", v) or \
-                re.findall(r"fc\d+_\d+", v):
+        # if re.findall(r"conv\d+_\d+", v) or \
+        #         re.findall(r"fc\d+_\d+", v):
+        #     break
+        if v[0:2]=="^_":
             break
     type = re.findall(r"[a-z]+", names[i])[0]
+    assert type=="conv" or type=="fc"
     start = 1
     for i, v in enumerate(names):
         now_type = re.findall(r"[a-z]+", v)[0]
@@ -483,21 +493,20 @@ def make_deeper_student_model(teacher_model,
     ind2name = [student_model_dict["config"][i]["config"]["name"]
                 for i in range(len(student_model_dict["config"]))]
     student_new_layer = copy.deepcopy(student_model_dict["config"][name2ind[new_name]])
-    student_new_layer["config"]["name"] = new_name + "_1"
+    student_new_layer["config"]["name"] = "^_"+ new_name
     if new_type == "conv":
         # student_new_layer["config"]["nb_filter"] NO NEED
         pass
     elif new_type == "fc":
         student_new_layer["config"]["init"] = "identity"
     student_model_dict["config"].insert(name2ind[new_name] + 1, student_new_layer)
-    # student_model_dict=reorder_dict(student_model_dict)
-
+    to_last_layer_softmax(student_model_dict)
     model = model_from_json(json.dumps(student_model_dict))
 
     if new_type == "conv" and init == 'net2deeper':
         prev_w, _ = teacher_model.get_layer(new_name).get_weights()
         new_weights = deeper_conv2d_weight(prev_w)
-        model.get_layer(new_name + "_1").set_weights(new_weights)
+        model.get_layer("^_"+new_name).set_weights(new_weights)
 
     ## copy weights for other layers
     copy_weights(teacher_model, model)
