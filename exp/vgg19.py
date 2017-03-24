@@ -67,7 +67,7 @@ x = Dense(2048, activation='relu', name='fc1')(x)
 x = Dense(1024, activation='relu', name='fc2')(x)
 x = Dense(10, activation='softmax', name='predictions')(x)
 
-train_data, validation_data = load_data(dbg=True)
+train_data, validation_data = load_data(dbg=False)
 
 # Create model
 model = Model(img_input, x)
@@ -79,7 +79,8 @@ print([l.name for l in model.layers])
 
 history = model.fit(
     *(train_data),
-    nb_epoch=1,
+    nb_epoch=10000,
+    batch_size=batch_szie,
     validation_data=validation_data,
     verbose=2,
     callbacks=[lr_reducer, early_stopper, csv_logger]
