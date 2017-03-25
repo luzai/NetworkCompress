@@ -18,9 +18,9 @@ from keras.layers import Dense, Dropout, Activation, Flatten
 from keras.layers import Convolution2D, MaxPooling2D
 from keras.utils import np_utils
 
-batch_size = 256
+batch_size = 1024
 nb_classes = 10
-nb_epoch = 50000 # 3
+nb_epoch = 16000 # 3
 data_augmentation = True
 
 # input image dimensions
@@ -39,7 +39,7 @@ Y_train = np_utils.to_categorical(y_train, nb_classes)
 Y_test = np_utils.to_categorical(y_test, nb_classes)
 
 def limit_data(x):
-    return x[:x.shape[0] / 5]
+    return x[:x.shape[0] / 10]
 
 X_train, Y_train, X_test, Y_test=map(limit_data,[X_train, Y_train, X_test, Y_test])
 X_train = X_train.astype('float32')
@@ -62,8 +62,8 @@ def reset_weights(model):
             print(layer, "not reinitialized")
 
 sav=[]
-for use_dropout in [True,False]:
-    for data_augmentation in [True,False]:
+for use_dropout in [False]:
+    for data_augmentation in [False]:
         if 'model' in locals():
             del model
         model = Sequential()
@@ -143,6 +143,6 @@ np.save("acc.npy",sav)
 for acc in sav:
     plt.plot(acc)
 
-plt.legend(["dropout+agu","dp","agu","neither"])
-plt.show()
+# plt.legend(["dropout+agu","dp","agu","neither"])
+plt.legend(["neither"])
 plt.savefig("acc.png")

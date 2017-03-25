@@ -86,7 +86,7 @@ if __name__ == "__main__":
         [l.name for l in teacher_model.layers],
         history.history["val_acc"] if history.history else[],
     ]]
-    for II in range(2):
+    for II in range(4):
         '''train net2net student model'''
         layer_names = [l.name for l in teacher_model.layers]
         possible_layer = []
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         name=re.sub(r":","_",name)
         command = [name]
         print command
-        for I in range(np.random.randint(3,6)):
+        for I in range(np.random.randint(3,8)):
             possible_layer, cmd = rand_cmd(possible_layer)
             command.append(cmd)
 

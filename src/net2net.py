@@ -3,7 +3,7 @@ from init import *
 
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Activation, Input, Dropout
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input,Dropout,Activation
 from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
 from keras.utils import np_utils, visualize_util
@@ -281,27 +281,56 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
 
     return model, history
 
+def get_name_ind_map(student_model_dict):
+    name2ind = {student_model_dict["config"]["layers"][i]["config"]["name"]: i
+                for i in range(len(student_model_dict["config"]["layers"]))}
+    ind2name = [student_model_dict["config"]["layers"][i]["config"]["name"]
+                for i in range(len(student_model_dict["config"]["layers"]))]
+    return name2ind,ind2name
+
+def get_config(dict,modify_layer,property):
+    name2ind, ind2name = get_name_ind_map(dict)
+    if isinstance(modify_layer, basestring):
+        modify_layer_ind = name2ind[modify_layer]
+    else:
+        modify_layer_ind = modify_layer
+
+    if dict["class_name"]=="Model":
+        return dict["config"]["layers"][modify_layer_ind]["config"][property]
+    else:
+        # Sequential will be Deprecated
+        assert dict["clas_name"]=="Sequential"
+        return dict["config"][modify_layer_ind]["config"][property]
+
+
+def set_config(dict,modify_layer,property,value):
+    name2ind, ind2name = get_name_ind_map(dict)
+    if isinstance(modify_layer, basestring):
+        modify_layer_ind = name2ind[modify_layer]
+    else:
+        modify_layer_ind = modify_layer
+
+    if dict["class_name"] == "Model":
+        dict["config"]["layers"][modify_layer_ind]["config"][property]=value
+    else:
+        # Sequential will be Deprecated
+        dict["config"][modify_layer_ind]["config"][property] = value
+
 
 def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_dict):
     student_model_dict = copy.deepcopy(teacher_model_dict)
     # student_model_dict=teacher_model_dict
-    name2ind = {student_model_dict["config"][i]["config"]["name"]: i
-                for i in range(len(student_model_dict["config"]))}
-    ind2name = [student_model_dict["config"][i]["config"]["name"]
-                for i in range(len(student_model_dict["config"]))]
 
-    modify_layer_ind = name2ind[modify_layer_name]
     CONV_WIDTH_LIMITS = 512
     new_conv1_width = min(
         CONV_WIDTH_LIMITS,
         int(
             new_conv1_width_ratio
-            * student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"]
+            * get_config(student_model_dict,modify_layer_name,"nb_filter")
         )
     )
-
-    student_model_dict["config"][modify_layer_ind]["config"]["nb_filter"] = new_conv1_width
-
+    set_config(student_model_dict,modify_layer_name,"nb_filter",new_conv1_width)
+    # No need:
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
     return student_model_dict, new_conv1_width, new_conv1_width == CONV_WIDTH_LIMITS
 
@@ -321,22 +350,17 @@ def to_last_layer_softmax(dict):
     dict["config"][-1]["config"]["activation"]="softmax"
 
 def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
-    # student_model_dict=teacher_model_dict
     student_model_dict = copy.deepcopy(teacher_model_dict)
-    name2ind = {student_model_dict["config"][i]["config"]["name"]: i
-                for i in
-                range(len(student_model_dict["config"]))}
-    ind2name = [student_model_dict["config"][i]["config"]["name"]
-                for i in range(len(student_model_dict["config"]))]
-    modify_layer_ind = name2ind[modify_layer_name]
+    # student_model_dict=teacher_model_dict
     FC_WIDTH_LIMITS = 4096
-    old_fc1_width = new_fc1_width_ratio * student_model_dict["config"][modify_layer_ind]["config"]["output_dim"]
+    old_fc1_width=new_fc1_width_ratio * \
+                    get_config(student_model_dict,modify_layer_name,"output_dim")
     new_fc1_width = min(
         FC_WIDTH_LIMITS,
         int(old_fc1_width)
     )
-    student_model_dict["config"][modify_layer_ind]["config"]["output_dim"] = new_fc1_width
-    student_model_dict["config"][modify_layer_ind]["config"]["init"] = "glorot_uniform"
+    set_config(student_model_dict,modify_layer_name,"output_dim",new_fc1_width)
+    set_config(student_model_dict,modify_layer_name,"init","glorot_uniform")
     # student_model_dict["config"][modify_layer_ind+1]["config"]["init"] = "glorot_uniform"
     student_model_dict = to_uniform_init_dict(student_model_dict)
     # automated!
@@ -419,19 +443,22 @@ def make_wider_student_model(teacher_model,
        with either 'random-pad' (baseline) or 'net2wider'
     '''
     new_type = re.findall(r"[a-z]+", new_name)[0]
+    assert new_type=="conv" or new_type=="fc"
     new_ind = re.findall(r"\d+", new_name)[0]
     new_ind = int(new_ind)
     teacher_model_dict = json.loads(teacher_model.to_json())
     if new_type == "conv":
 
         new_conv1_name = new_name
-        student_model_dict, new_conv1_width, return_flag = wider_conv2d_dict(new_width_ratio, new_conv1_name,
+        student_model_dict, new_conv1_width, return_flag \
+            = wider_conv2d_dict(new_width_ratio, new_conv1_name,
                                                                              teacher_model_dict)
 
     elif new_type == "fc":
 
         new_fc1_name = new_name
-        student_model_dict, new_fc1_width, return_flag = wider_fc_dict(new_width_ratio, new_fc1_name,
+        student_model_dict, new_fc1_width, return_flag \
+            = wider_fc_dict(new_width_ratio, new_fc1_name,
                                                                        teacher_model_dict)
     if return_flag:
         return teacher_model, None
@@ -483,19 +510,16 @@ def make_deeper_student_model(teacher_model,
        with either 'random-init' (baseline) or 'net2deeper'
     '''
     new_type = re.findall(r"[a-z]+", new_name)[0]
-    new_ind = re.findall(r"\d+", new_name)[0]
-    new_ind = int(new_ind)
+    new_ind = int(re.findall(r"\d+", new_name)[0])
+
     teacher_model_dict = json.loads(teacher_model.to_json())
     student_model_dict = copy.deepcopy(teacher_model_dict)
+    name2ind,ind2name=get_name_ind_map(student_model_dict)
 
-    name2ind = {student_model_dict["config"][i]["config"]["name"]: i
-                for i in range(len(student_model_dict["config"]))}
-    ind2name = [student_model_dict["config"][i]["config"]["name"]
-                for i in range(len(student_model_dict["config"]))]
     student_new_layer = copy.deepcopy(student_model_dict["config"][name2ind[new_name]])
     student_new_layer["config"]["name"] = "^_"+ new_name
     if new_type == "conv":
-        # student_new_layer["config"]["nb_filter"] NO NEED
+        # student_new_layer["config"]["nb_filter"] # NO NEED
         pass
     elif new_type == "fc":
         student_new_layer["config"]["init"] = "identity"
@@ -545,6 +569,7 @@ def copy_model(model):
 
 def make_model(teacher_model, commands, train_data, validation_data):
     student_model = copy_model(teacher_model)
+    student_model=shuffle_weights(student_model)
     log = []
     print "\n\n------------------------------\n\n"
 
@@ -552,7 +577,7 @@ def make_model(teacher_model, commands, train_data, validation_data):
         print "\n\n------------------------------\n\n"
         # os.system("nvidia-smi")
         print "Attention: ", cmd
-        # visualize_util.plot(student_model, to_file=str(int(time.time())) + '.png', show_shapes=True)
+        # visualize_util.plot(student_model, to_file=str(int(time.time())) + '.pdf', show_shapes=True)
         if cmd[0] == "net2wider" or cmd[0] == "random-pad":
             student_model, history = make_wider_student_model(
                 student_model,
@@ -582,17 +607,13 @@ def make_model(teacher_model, commands, train_data, validation_data):
 
     name = commands[0]
 
+    save_model_config(student_model, name)
+
     _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
 
     subprocess.call(_shell_cmd.split())
     os.chdir(osp.join(root_dir, "output", name))
-    student_model.save_weights(name + ".h5")
-    with open(name + ".json", "w") as f:
-        json.dump(
-            json.loads(student_model.to_json()),
-            f,
-            indent=2
-        )
+
     with open(name + ".pkl", 'w') as f:
         cPickle.dump(log, f)
     with open(name + ".log", "w") as f:
@@ -600,7 +621,7 @@ def make_model(teacher_model, commands, train_data, validation_data):
             f.write(str(log_item[0]) + "\n")
             [f.write("\t" + str(log_item_item) + "\n") for log_item_item in log_item[1:]]
     visualize_util.plot(teacher_model, to_file="teacher.png", show_shapes=True)
-    visualize_util.plot(student_model, to_file=name + '.png', show_shapes=True)
+
     os.chdir("../../src")
 
     return student_model, log
@@ -617,7 +638,7 @@ def save_model_config(student_model, name):
             f,
             indent=2
         )
-    visualize_util.plot(student_model, to_file=name + '.png', show_shapes=True)
+    visualize_util.plot(student_model, to_file=name + '.pdf', show_shapes=True)
     os.chdir("../../src")
 
 
@@ -658,21 +679,24 @@ def shuffle_weights(model, weights=None):
 #     return xx, yy_sg
 
 def vis(log0, log12, command):
-    acc0 = np.array(log0[0][-1])
-
+    acc0 = [0]+log0[0][-1]
+    plt.clf()
+    plt.close("all")
+    plt.figure()
+    # plt.hold(True)
     for log in log12:
-        acc = []
+        acc = acc0
+        plt.plot(np.arange(start=0,stop=len(acc)),np.array(acc))
         for log_item in log:
+            plt.plot(np.arange(start=len(acc),stop=len(acc+log_item[-1])),np.array(log_item[-1]))
             acc += log_item[-1]
         acc = np.array(acc)
-        acc_con = np.concatenate((acc0, acc))
-
-        plt.plot(acc_con)
-        print acc_con.shape
-    plt.legend([command[0]])
-    # plt.plot(acc0)
+        print acc.shape
+        np.save("val_acc.npy", acc)
+    # plt.legend([command[0]])
     os.chdir(osp.join(root_dir, "output", command[0]))
-    np.save("val_acc.npy", acc_con)
+
+    plt.savefig('val_acc.pdf')
     plt.savefig('val_acc.png')
     # try:
     #     plt.show()
