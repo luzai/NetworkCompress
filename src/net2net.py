@@ -3,10 +3,11 @@ from init import *
 
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, Convolution2D
 from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
 from keras.utils import np_utils, visualize_util
+from keras.preprocessing.image import ImageDataGenerator
 from keras import backend as K
 
 from load_transfer_data import get_transfer_data
@@ -34,24 +35,24 @@ def preprocess_output(y):
     return np_utils.to_categorical(y, nb_class)
 
 
-def limit_data(x, limits):
-    # print x.shape[0],limits,x.shape[0] / limits
-    return x[:x.shape[0] / limits]
+def limit_data(x, division):
+    # print(x.shape[0],limits,x.shape[0] / limits)
+    return x[:x.shape[0] / division]
 
 
 def check_data_format(train_data, test_data):
     if len(train_data[1]) == 2:
-        print "train_img.shape", train_data[0].shape, \
-            "\ntrain_logits", train_data[1][0].shape, \
-            "\ntrain_label", train_data[1][1].shape
-        print "test_img.shape", test_data[0].shape, \
-            "\ntest_logits", test_data[1][0].shape, \
-            "\ntest_label", test_data[1][1].shape
+        print("train_img.shape", train_data[0].shape,
+            "\ntrain_logits", train_data[1][0].shape,
+            "\ntrain_label", train_data[1][1].shape)
+        print("test_img.shape", test_data[0].shape,
+            "\ntest_logits", test_data[1][0].shape,
+            "\ntest_label", test_data[1][1].shape)
     else:
-        print "train_img.shape", train_data[0].shape, \
-            "\ntrain_y", train_data[1].shape,
-        print "test_img.shape", test_data[0].shape, \
-            "\ntest_y", test_data[1].shape,
+        print("train_img.shape", train_data[0].shape,
+            "\ntrain_y", train_data[1].shape)
+        print("test_img.shape", test_data[0].shape,
+            "\ntest_y", test_data[1].shape)
 
 
 def load_data(dbg=False):
@@ -78,18 +79,18 @@ def load_data(dbg=False):
         train_x, train_y, \
         test_x, test_y, \
         train_logits, test_logits \
-            = map(lambda x: limit_data(x, limits=9999), [train_x, train_y,
-                                                         test_x, test_y,
-                                                         train_logits, test_logits]
+            = map(lambda x: limit_data(x, division=9999), [train_x, train_y,
+                                                           test_x, test_y,
+                                                           train_logits, test_logits]
                   )
     else:
         '''For speedup'''
         train_x, train_y, \
         test_x, test_y, \
         train_logits, test_logits \
-            = map(lambda x: limit_data(x, limits=5), [train_x, train_y,
-                                                      test_x, test_y,
-                                                      train_logits, test_logits]
+            = map(lambda x: limit_data(x, division=1), [train_x, train_y,
+                                                        test_x, test_y,
+                                                        train_logits, test_logits]
                   )
     # train_data = (train_x, [train_logits, train_y])
     # test_data = (test_x, [test_logits, test_y])
@@ -256,8 +257,8 @@ def copy_weights(teacher_model, student_model, layer_names=None):
         try:
             student_model.get_layer(name=name).set_weights(weights)
         except ValueError as e:
-            # print "some layer shape change, Don't copy, We Init it Manually! OK!"
-            # print "\t It is OK! Detail: {}".format(e)
+            # print("some layer shape change, Don't copy, We Init it Manually! OK!")
+            # print("\t It is OK! Detail: {}".format(e))
             pass
 
 
@@ -306,7 +307,7 @@ def get_name_ind_map(student_model_dict):
         ind2name = [student_model_dict["config"]["layers"][i]["config"]["name"]
                     for i in range(len(student_model_dict["config"]["layers"]))]
     else:
-        # print student_model_dict["class_name"]
+        # print(student_model_dict["class_name"])
         assert student_model_dict["class_name"] == "Sequential"
         name2ind = {student_model_dict["config"][i]["config"]["name"]: i
                     for i in range(len(student_model_dict["config"]))}
@@ -585,9 +586,9 @@ def make_deeper_student_model(teacher_model,
 
     ## copy weights for other layers
     copy_weights(teacher_model, model)
-    # print [l.name for l in model.layers]
+    # print([l.name for l in model.layers])
     model = reorder_model(model)
-    # print [l.name for l in model.layers]
+    # print([l.name for l in model.layers])
     model.compile(loss='categorical_crossentropy',
                   optimizer=SGD(lr=0.001, momentum=0.9),
                   metrics=['accuracy'])
@@ -622,12 +623,12 @@ def make_model(teacher_model, commands, train_data, validation_data):
     student_model = copy_model(teacher_model)
     student_model = shuffle_weights(student_model)
     log = []
-    print "\n------------------------------\n"
+    print("\n------------------------------\n")
 
     for cmd in commands[1:]:
-        print "\n------------------------------\n"
+        print("\n------------------------------\n")
         # os.system("nvidia-smi")
-        print "Attention: ", cmd
+        print("Attention: ", cmd)
         # visualize_util.plot(student_model, to_file=str(int(time.time())) + '.pdf', show_shapes=True)
         if cmd[0] == "net2wider" or cmd[0] == "random-pad":
             student_model, history = make_wider_student_model(
@@ -645,10 +646,10 @@ def make_model(teacher_model, commands, train_data, validation_data):
             raise ValueError('Unsupported cmd: %s' % cmd[0])
         # student_model.summary()
         # os.system("nvidia-smi")
-        print get_width(student_model)
+        print(get_width(student_model))
         if history == None:
             continue
-        # print raw_input("check mem")
+        # print(raw_input("check mem"))
         log_append_t = [
             cmd,
             [l.name for l in student_model.layers],
@@ -757,7 +758,7 @@ def vis(log0, log12, command):
             plt.plot(np.arange(start=len(acc), stop=len(acc + log_item[-1])), np.array(log_item[-1]))
             acc += log_item[-1]
         acc = np.array(acc)
-        print acc.shape
+        print(acc.shape)
         np.save("val_acc.npy", acc)
     # plt.legend([command[0]])
     _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", command[0])

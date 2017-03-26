@@ -31,6 +31,6 @@ model.layers[1].name="TTT"
 model.layers[1].input=model.layers[0].name
 # model.layers[1].output
 print([l.name for l in model.layers])
-print model.get_layer("fc2")
+print(model.get_layer("fc2"))
 save_model_config(model,"functional")
 

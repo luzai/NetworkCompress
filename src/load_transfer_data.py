@@ -40,8 +40,8 @@ def get_transfer_data(transfer_data_path):
 
     X_transfer = X_transfer.transpose((0, 3, 1,2))    
 
-    print 'X_transfer shape is: ',  X_transfer.shape
-    print 'Y_transfer shape is: ',  Y_transfer.shape
+    print('X_transfer shape is: ',  X_transfer.shape)
+    print('Y_transfer shape is: ',  Y_transfer.shape)
     
     return X_transfer, Y_transfer
 

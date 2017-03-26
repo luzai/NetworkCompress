@@ -98,12 +98,12 @@ if __name__ == "__main__":
                     and layer_type[0] == "conv" or layer_type[0] == "fc":
                 possible_layer += [layer]
 
-        print "possible layer",possible_layer
+        print("possible layer",possible_layer)
 
         name=re.sub(r"\s","_",datetime.datetime.now().ctime())
         name=re.sub(r":","_",name)
         command = [name]
-        print command
+        print(command)
         for I in range(np.random.randint(3,8)):
             possible_layer, cmd = rand_cmd(possible_layer)
             command.append(cmd)

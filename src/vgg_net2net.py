@@ -53,12 +53,12 @@ if __name__ == "__main__":
         history.history["val_acc"] if history.history else[],
     ]]
     student_conv_width,student_fc_width=get_width(teacher_model)
-    print student_conv_width,student_fc_width
-    print vgg_conv_width,vgg_fc_width
+    print(student_conv_width,student_fc_width)
+    print(vgg_conv_width,vgg_fc_width)
 
 
     command = [
-        "net2net",  # model name
+        "vgg_net2net",  # model name
         ["net2deeper", "conv2", 0, args.gl_verbose],
 
         ["net2wider", "conv3", 2, 0, args.gl_verbose],
@@ -66,9 +66,9 @@ if __name__ == "__main__":
 
         ["net2deeper", "conv4", 0, args.gl_verbose],
         ["net2wider", "conv5", 2, 0, args.gl_verbose],
+        ["net2deeper", "conv5", 0, args.gl_verbose],
         ["net2deeper", "conv6", 0, args.gl_verbose],
         ["net2deeper", "conv7", 0, args.gl_verbose],
-        ["net2deeper", "conv8", 0, args.gl_verbose],
 
         ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],
         ["net2wider", "fc1",int(2048./64), args.nb_epoch, args.gl_verbose],
@@ -77,4 +77,4 @@ if __name__ == "__main__":
     ]
     student_model, log1 = make_model(teacher_model, command,
                                      train_data, validation_data)
-    print get_width(student_model)
+    print(get_width(student_model))

@@ -13,7 +13,7 @@ for parent, dirnames, filenames in os.walk(rootdir):
         if parent != '.' and parent != '..':
             label = cate_list.index(parent[2:])
             line = os.path.join(parent[2:],filename) + " " + str(label) + '\n'
-            print line
+            print(line)
             file.write(line)
 
 file.close()     
