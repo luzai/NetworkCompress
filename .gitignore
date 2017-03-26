@@ -1,12 +1,10 @@
 # xlwang custom
 *.h5
 *.npy
-#model/
-#output/
-data/
-#example/
-#test/
+*.db
 .idea/
+*.JPEG
+*.model
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

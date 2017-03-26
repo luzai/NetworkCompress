@@ -15,16 +15,16 @@
           ], 
           "sparse": false, 
           "input_dtype": "float32", 
-          "name": "input_5"
+          "name": "input_1"
         }, 
-        "name": "input_5"
+        "name": "input_1"
       }, 
       {
         "class_name": "Convolution2D", 
         "inbound_nodes": [
           [
             [
-              "input_5", 
+              "input_1", 
               0, 
               0
             ]
@@ -94,16 +94,16 @@
         "config": {
           "p": 0.25, 
           "trainable": true, 
-          "name": "dropout_13"
+          "name": "dropout_1"
         }, 
-        "name": "dropout_13"
+        "name": "dropout_1"
       }, 
       {
         "class_name": "Convolution2D", 
         "inbound_nodes": [
           [
             [
-              "dropout_13", 
+              "dropout_1", 
               0, 
               0
             ]
@@ -173,16 +173,16 @@
         "config": {
           "p": 0.25, 
           "trainable": true, 
-          "name": "dropout_14"
+          "name": "dropout_2"
         }, 
-        "name": "dropout_14"
+        "name": "dropout_2"
       }, 
       {
         "class_name": "Flatten", 
         "inbound_nodes": [
           [
             [
-              "dropout_14", 
+              "dropout_2", 
               0, 
               0
             ]
@@ -235,16 +235,16 @@
         "config": {
           "p": 0.5, 
           "trainable": true, 
-          "name": "dropout_15"
+          "name": "dropout_3"
         }, 
-        "name": "dropout_15"
+        "name": "dropout_3"
       }, 
       {
         "class_name": "Dense", 
         "inbound_nodes": [
           [
             [
-              "dropout_15", 
+              "dropout_3", 
               0, 
               0
             ]
@@ -280,19 +280,19 @@
         "config": {
           "activation": "softmax", 
           "trainable": true, 
-          "name": "activation_5"
+          "name": "activation_1"
         }, 
-        "name": "activation_5"
+        "name": "activation_1"
       }
     ], 
     "input_layers": [
       [
-        "input_5", 
+        "input_1", 
         0, 
         0
       ]
     ], 
-    "name": "model_5", 
+    "name": "model_1", 
     "output_layers": [
       [
         "fc2", 
@@ -300,7 +300,7 @@
         0
       ], 
       [
-        "activation_5", 
+        "activation_1", 
         0, 
         0
       ]

@@ -1,5 +1,5 @@
 # lazy import ...
-print "init"
+print("init")
 import matplotlib, sys, os, \
     glob, cPickle, scipy, \
     argparse, errno, json,\
@@ -15,28 +15,28 @@ import scipy.io as sio
 from pprint import pprint
 import subprocess
 # import cv2, cv
-# print "opencv version " + cv2.__version__
+# print("opencv version " + cv2.__version__)
 
 _shell_cmd = "rm -f __init__.pyc init.pyc load_transfer_data.pyc  net2net.pyc"
-if subprocess.call(_shell_cmd.split()) == 0: print "reload"
+if subprocess.call(_shell_cmd.split()) == 0: print("reload")
 
 keras_backend = "theano"
 gpu = True
 if keras_backend == "theano":
     _shell_cmd = "cp /home/xlwang/.keras/keras.json.th /home/xlwang/.keras/keras.json"
-    if subprocess.call(_shell_cmd.split()) == 0: print "using keras backend theano"
+    if subprocess.call(_shell_cmd.split()) == 0: print("using keras backend theano")
     if not gpu:
         _shell_cmd = "cp /home/xlwang/.theanorc.cpu /home/xlwang/.theanorc"
-        if subprocess.call(_shell_cmd.split()) == 0: print "using cpu"
+        if subprocess.call(_shell_cmd.split()) == 0: print("using cpu")
         os.environ['THEANO_FLAGS'] = \
             "floatX=float32,device=cpu," \
             "fastmath=True,ldflags=-lopenblas"
     else:
         _shell_cmd = "cp /home/xlwang/.theanorc.gpu /home/xlwang/.theanorc"
-        if subprocess.call(_shell_cmd.split()) == 0: print "using gpu"
+        if subprocess.call(_shell_cmd.split()) == 0: print("using gpu")
 else:
     _shell_cmd = "cp /home/xlwang/.keras/keras.json.tf /home/xlwang/.keras/keras.json"
-    if subprocess.call(_shell_cmd.split()) == 0: print "using keras backend tf"
+    if subprocess.call(_shell_cmd.split()) == 0: print("using keras backend tf")
 
 
 # def add_path(path):
@@ -57,14 +57,14 @@ if with_caffe == True:
     #     caffe_root = input("input your caffe root")
     # os.chdir(caffe_root + "/python")
     # sys.path.insert(0, caffe_root + "/python")
-    # print sys.path
+    # print(sys.path)
     try:
         caffe = imp.load_source('caffe', '/home/luzai/App/caffe/python')
     except Exception as inst:
-        print inst.args
-        print 'import caffe fail'
+        print(inst.args)
+        print('import caffe fail')
     finally:
         pass
         # os.chdir(run_root)
 
-print "\n\n------------------------------\n\n"
+print("\n------------------------------\n")
