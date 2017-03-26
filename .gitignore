@@ -3,6 +3,7 @@
 *.npy
 *.db
 .idea/
+*.JPEG
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -3,10 +3,11 @@ from init import *
 
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input,Dropout,Activation
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization
 from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
 from keras.utils import np_utils, visualize_util
+from keras import backend as K
 
 from load_transfer_data import get_transfer_data
 
@@ -33,22 +34,24 @@ def preprocess_output(y):
     return np_utils.to_categorical(y, nb_class)
 
 
-def limit_data(x,limits):
+def limit_data(x, limits):
     # print x.shape[0],limits,x.shape[0] / limits
     return x[:x.shape[0] / limits]
 
 
 def check_data_format(train_data, test_data):
-    # print "train_img.shape", train_data[0].shape, \
-    #     "\ntrain_logits", train_data[1][0].shape, \
-    #     "\ntrain_label", train_data[1][1].shape
-    # print "test_img.shape", test_data[0].shape, \
-    #     "\ntest_logits", test_data[1][0].shape, \
-    #     "\ntest_label", test_data[1][1].shape
-    print "train_img.shape", train_data[0].shape, \
-        "\ntrain_y", train_data[1].shape,
-    print "test_img.shape", test_data[0].shape, \
-        "\ntest_y", test_data[1].shape,
+    if len(train_data[1]) == 2:
+        print "train_img.shape", train_data[0].shape, \
+            "\ntrain_logits", train_data[1][0].shape, \
+            "\ntrain_label", train_data[1][1].shape
+        print "test_img.shape", test_data[0].shape, \
+            "\ntest_logits", test_data[1][0].shape, \
+            "\ntest_label", test_data[1][1].shape
+    else:
+        print "train_img.shape", train_data[0].shape, \
+            "\ntrain_y", train_data[1].shape,
+        print "test_img.shape", test_data[0].shape, \
+            "\ntest_y", test_data[1].shape,
 
 
 def load_data(dbg=False):
@@ -75,18 +78,18 @@ def load_data(dbg=False):
         train_x, train_y, \
         test_x, test_y, \
         train_logits, test_logits \
-            = map(lambda x:limit_data(x,limits=9999), [train_x, train_y,
-                               test_x, test_y,
-                               train_logits, test_logits]
+            = map(lambda x: limit_data(x, limits=9999), [train_x, train_y,
+                                                         test_x, test_y,
+                                                         train_logits, test_logits]
                   )
     else:
         '''For speedup'''
         train_x, train_y, \
         test_x, test_y, \
         train_logits, test_logits \
-            = map(lambda x:limit_data(x,limits=5), [train_x, train_y,
-                               test_x, test_y,
-                               train_logits, test_logits]
+            = map(lambda x: limit_data(x, limits=5), [train_x, train_y,
+                                                      test_x, test_y,
+                                                      train_logits, test_logits]
                   )
     # train_data = (train_x, [train_logits, train_y])
     # test_data = (test_x, [test_logits, test_y])
@@ -128,41 +131,55 @@ def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
         init: initialization algorithm for new weights,
           either 'random-pad' or 'net2wider'
     '''
-    assert teacher_w1.shape[0] == teacher_w2.shape[1], (
-        'successive layers from teacher model should have compatible shapes')
-    assert teacher_w1.shape[0] == teacher_b1.shape[0], (
-        'weight and bias from same layer should have compatible shapes')
-    # new_width=teacher_w1.shape[0]*new_width_ratio
-    assert new_width > teacher_w1.shape[0], (
-        'new width (nb_filter) should be bigger than the existing one')
-
-    n = new_width - teacher_w1.shape[0]
-    if init == 'random-pad':
-        new_w1 = np.random.normal(0, 0.1, size=(n,) + teacher_w1.shape[1:])
-        new_b1 = np.ones(n) * 0.1
-        new_w2 = np.random.normal(0, 0.1, size=(
-                                                   teacher_w2.shape[0], n) + teacher_w2.shape[2:])
-    elif init == 'net2wider':
+    if teacher_w2 is None:
+        n = new_width - teacher_w1.shape[0]
         index = np.random.randint(teacher_w1.shape[0], size=n)
         factors = np.bincount(index)[index] + 1.
         new_w1 = teacher_w1[index, :, :, :]
+        noise = np.random.normal(0, 5e-2 * new_w1.std(), size=new_w1.shape)
+        student_w1 = np.concatenate((teacher_w1, new_w1+noise), axis=0)
+
         new_b1 = teacher_b1[index]
-        new_w2 = teacher_w2[:, index, :, :] / factors.reshape((1, -1, 1, 1))
+        noise = np.random.normal(0, 5e-2 * new_b1.std(), size=new_b1.shape)
+        student_b1 = np.concatenate((teacher_b1, new_b1+noise), axis=0)
+
+        return student_w1, student_b1
     else:
-        raise ValueError('Unsupported weight initializer: %s' % init)
+        assert teacher_w1.shape[0] == teacher_w2.shape[1], (
+            'successive layers from teacher model should have compatible shapes')
+        assert teacher_w1.shape[0] == teacher_b1.shape[0], (
+            'weight and bias from same layer should have compatible shapes')
+        # new_width=teacher_w1.shape[0]*new_width_ratio
+        assert new_width > teacher_w1.shape[0], (
+            'new width (nb_filter) should be bigger than the existing one')
 
-    student_w1 = np.concatenate((teacher_w1, new_w1), axis=0)
-    if init == 'random-pad':
-        student_w2 = np.concatenate((teacher_w2, new_w2), axis=1)
-    elif init == 'net2wider':
-        # add small noise to break symmetry, so that student model will have
-        # full capacity later
-        noise = np.random.normal(0, 5e-2 * new_w2.std(), size=new_w2.shape)
-        student_w2 = np.concatenate((teacher_w2, new_w2 + noise), axis=1)
-        student_w2[:, index, :, :] = new_w2
-    student_b1 = np.concatenate((teacher_b1, new_b1), axis=0)
+        n = new_width - teacher_w1.shape[0]
+        if init == 'random-pad':
+            new_w1 = np.random.normal(0, 0.1, size=(n,) + teacher_w1.shape[1:])
+            new_b1 = np.ones(n) * 0.1
+            new_w2 = np.random.normal(0, 0.1, size=(
+                                                       teacher_w2.shape[0], n) + teacher_w2.shape[2:])
+        elif init == 'net2wider':
+            index = np.random.randint(teacher_w1.shape[0], size=n)
+            factors = np.bincount(index)[index] + 1.
+            new_w1 = teacher_w1[index, :, :, :]
+            new_b1 = teacher_b1[index]
+            new_w2 = teacher_w2[:, index, :, :] / factors.reshape((1, -1, 1, 1))
+        else:
+            raise ValueError('Unsupported weight initializer: %s' % init)
 
-    return student_w1, student_b1, student_w2
+        student_w1 = np.concatenate((teacher_w1, new_w1), axis=0)
+        if init == 'random-pad':
+            student_w2 = np.concatenate((teacher_w2, new_w2), axis=1)
+        elif init == 'net2wider':
+            # add small noise to break symmetry, so that student model will have
+            # full capacity later
+            noise = np.random.normal(0, 5e-2 * new_w2.std(), size=new_w2.shape)
+            student_w2 = np.concatenate((teacher_w2, new_w2 + noise), axis=1)
+            student_w2[:, index, :, :] = new_w2
+        student_b1 = np.concatenate((teacher_b1, new_b1), axis=0)
+
+        return student_w1, student_b1, student_w2
 
 
 def wider_fc_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
@@ -255,10 +272,10 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
     '''
     model = Sequential()
     model.add(Conv2D(64, 3, 3, input_shape=input_shape,
-                     border_mode='same', name='conv1',activation="relu"))
+                     border_mode='same', name='conv1', activation="relu"))
     model.add(MaxPooling2D(name='pool1'))
     # model.add(Dropout(0.25,name='conv_drop1'))
-    model.add(Conv2D(64, 3, 3, border_mode='same', name='conv2',activation="relu"))
+    model.add(Conv2D(64, 3, 3, border_mode='same', name='conv2', activation="relu"))
     model.add(MaxPooling2D(name='pool2'))
     # model.add(Dropout(0.25,name='conv_drop2'))
     model.add(Flatten(name='flatten'))
@@ -281,29 +298,37 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
 
     return model, history
 
+
 def get_name_ind_map(student_model_dict):
-    name2ind = {student_model_dict["config"]["layers"][i]["config"]["name"]: i
-                for i in range(len(student_model_dict["config"]["layers"]))}
-    ind2name = [student_model_dict["config"]["layers"][i]["config"]["name"]
-                for i in range(len(student_model_dict["config"]["layers"]))]
-    return name2ind,ind2name
-
-def get_config(dict,modify_layer,property):
-    name2ind, ind2name = get_name_ind_map(dict)
-    if isinstance(modify_layer, basestring):
-        modify_layer_ind = name2ind[modify_layer]
+    if student_model_dict["class_name"] == "Model":
+        name2ind = {student_model_dict["config"]["layers"][i]["config"]["name"]: i
+                    for i in range(len(student_model_dict["config"]["layers"]))}
+        ind2name = [student_model_dict["config"]["layers"][i]["config"]["name"]
+                    for i in range(len(student_model_dict["config"]["layers"]))]
     else:
-        modify_layer_ind = modify_layer
+        # print student_model_dict["class_name"]
+        assert student_model_dict["class_name"] == "Sequential"
+        name2ind = {student_model_dict["config"][i]["config"]["name"]: i
+                    for i in range(len(student_model_dict["config"]))}
+        ind2name = [student_model_dict["config"][i]["config"]["name"]
+                    for i in range(len(student_model_dict["config"]))]
+    return name2ind, ind2name
 
-    if dict["class_name"]=="Model":
-        return dict["config"]["layers"][modify_layer_ind]["config"][property]
-    else:
-        # Sequential will be Deprecated
-        assert dict["clas_name"]=="Sequential"
-        return dict["config"][modify_layer_ind]["config"][property]
+def get_width(model):
+    mdict=json.loads(model.to_json())
+    name2ind,ind2name=get_name_ind_map(mdict)
+    student_conv_width=[]
+    student_fc_width=[]
+    for i,v in enumerate(ind2name):
+
+        if mdict["config"][i]["class_name"]=="Convolution2D":
+            student_conv_width+=[get_config(mdict,i,"nb_filter")]
+        elif mdict["config"][i]["class_name"]=="Dense":
+            student_fc_width += [get_config(mdict, i, "output_dim")]
+    return student_conv_width,student_fc_width
 
 
-def set_config(dict,modify_layer,property,value):
+def get_config(dict, modify_layer, property):
     name2ind, ind2name = get_name_ind_map(dict)
     if isinstance(modify_layer, basestring):
         modify_layer_ind = name2ind[modify_layer]
@@ -311,7 +336,22 @@ def set_config(dict,modify_layer,property,value):
         modify_layer_ind = modify_layer
 
     if dict["class_name"] == "Model":
-        dict["config"]["layers"][modify_layer_ind]["config"][property]=value
+        return dict["config"]["layers"][modify_layer_ind]["config"][property]
+    else:
+        # Sequential will be Deprecated
+        assert dict["class_name"] == "Sequential"
+        return dict["config"][modify_layer_ind]["config"][property]
+
+
+def set_config(dict, modify_layer, property, value):
+    name2ind, ind2name = get_name_ind_map(dict)
+    if isinstance(modify_layer, basestring):
+        modify_layer_ind = name2ind[modify_layer]
+    else:
+        modify_layer_ind = modify_layer
+
+    if dict["class_name"] == "Model":
+        dict["config"]["layers"][modify_layer_ind]["config"][property] = value
     else:
         # Sequential will be Deprecated
         dict["config"][modify_layer_ind]["config"][property] = value
@@ -326,10 +366,10 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
         CONV_WIDTH_LIMITS,
         int(
             new_conv1_width_ratio
-            * get_config(student_model_dict,modify_layer_name,"nb_filter")
+            * get_config(student_model_dict, modify_layer_name, "nb_filter")
         )
     )
-    set_config(student_model_dict,modify_layer_name,"nb_filter",new_conv1_width)
+    set_config(student_model_dict, modify_layer_name, "nb_filter", new_conv1_width)
     # No need:
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
     return student_model_dict, new_conv1_width, new_conv1_width == CONV_WIDTH_LIMITS
@@ -343,30 +383,34 @@ def to_uniform_init_dict(student_model_dict):
             layer["config"]["init"] = "glorot_uniform"
     return student_model_dict
     # pass
+
+
 def to_last_layer_softmax(dict):
     for layer in dict["config"][:-1]:
-        if layer["class_name"]=="Dense" :
-            layer["config"]["activation"]="relu"
-    dict["config"][-1]["config"]["activation"]="softmax"
+        if layer["class_name"] == "Dense":
+            layer["config"]["activation"] = "relu"
+    dict["config"][-1]["config"]["activation"] = "softmax"
+
 
 def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     student_model_dict = copy.deepcopy(teacher_model_dict)
     # student_model_dict=teacher_model_dict
     FC_WIDTH_LIMITS = 4096
-    old_fc1_width=new_fc1_width_ratio * \
-                    get_config(student_model_dict,modify_layer_name,"output_dim")
+    old_fc1_width = new_fc1_width_ratio * \
+                    get_config(student_model_dict, modify_layer_name, "output_dim")
     new_fc1_width = min(
         FC_WIDTH_LIMITS,
         int(old_fc1_width)
     )
-    set_config(student_model_dict,modify_layer_name,"output_dim",new_fc1_width)
-    set_config(student_model_dict,modify_layer_name,"init","glorot_uniform")
+    set_config(student_model_dict, modify_layer_name, "output_dim", new_fc1_width)
+    set_config(student_model_dict, modify_layer_name, "init", "glorot_uniform")
     # student_model_dict["config"][modify_layer_ind+1]["config"]["init"] = "glorot_uniform"
     student_model_dict = to_uniform_init_dict(student_model_dict)
     # automated!
     # student_model_dict["config"][modify_layer_ind+1]["config"]["input_dim"]=new_fc1_width
     # student_model_dict["config"][modify_layer_ind + 1]["config"]["batch_input_shape"]=[None,new_fc1_width]
     return student_model_dict, new_fc1_width, new_fc1_width == FC_WIDTH_LIMITS or old_fc1_width == new_fc1_width
+
 
 ## not being use
 # def reorder_dict(d):
@@ -399,10 +443,10 @@ def reorder_list(layers):
         # if re.findall(r"conv\d+_\d+", v) or \
         #         re.findall(r"fc\d+_\d+", v):
         #     break
-        if v[0:2]=="^_":
+        if v[0:2] == "^_":
             break
     layer_type = re.findall(r"[a-z]+", layers[i])[0]
-    assert layer_type=="conv" or layer_type=="fc"
+    assert layer_type == "conv" or layer_type == "fc"
     start = 1
     for i, v in enumerate(layers):
         now_layer_type = re.findall(r"[a-z]+", v)[0]
@@ -421,10 +465,10 @@ def reorder_model(model):
         # if re.findall(r"conv\d+_\d+", v) or \
         #         re.findall(r"fc\d+_\d+", v):
         #     break
-        if v[0:2]=="^_":
+        if v[0:2] == "^_":
             break
     type = re.findall(r"[a-z]+", names[i])[0]
-    assert type=="conv" or type=="fc"
+    assert type == "conv" or type == "fc"
     start = 1
     for i, v in enumerate(names):
         now_type = re.findall(r"[a-z]+", v)[0]
@@ -443,7 +487,7 @@ def make_wider_student_model(teacher_model,
        with either 'random-pad' (baseline) or 'net2wider'
     '''
     new_type = re.findall(r"[a-z]+", new_name)[0]
-    assert new_type=="conv" or new_type=="fc"
+    assert new_type == "conv" or new_type == "fc"
     new_ind = re.findall(r"\d+", new_name)[0]
     new_ind = int(new_ind)
     teacher_model_dict = json.loads(teacher_model.to_json())
@@ -452,14 +496,14 @@ def make_wider_student_model(teacher_model,
         new_conv1_name = new_name
         student_model_dict, new_conv1_width, return_flag \
             = wider_conv2d_dict(new_width_ratio, new_conv1_name,
-                                                                             teacher_model_dict)
+                                teacher_model_dict)
 
     elif new_type == "fc":
 
         new_fc1_name = new_name
         student_model_dict, new_fc1_width, return_flag \
             = wider_fc_dict(new_width_ratio, new_fc1_name,
-                                                                       teacher_model_dict)
+                            teacher_model_dict)
     if return_flag:
         return teacher_model, None
     model = model_from_json(json.dumps(student_model_dict))
@@ -471,12 +515,19 @@ def make_wider_student_model(teacher_model,
     copy_weights(teacher_model, model, layer_name)
     if new_type == "conv":
         next_new_name = new_type + str(new_ind + 1)
-        w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
-        w_conv2, b_conv2 = teacher_model.get_layer(next_new_name).get_weights()
-        new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
-            w_conv1, b_conv1, w_conv2, new_conv1_width, init)
-        model.get_layer(new_name).set_weights([new_w_conv1, new_b_conv1])
-        model.get_layer(next_new_name).set_weights([new_w_conv2, b_conv2])
+        if next_new_name in [l.name for l in model.layers]:
+            w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
+            w_conv2, b_conv2 = teacher_model.get_layer(next_new_name).get_weights()
+            new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
+                w_conv1, b_conv1, w_conv2, new_conv1_width, init)
+            model.get_layer(new_name).set_weights([new_w_conv1, new_b_conv1])
+            model.get_layer(next_new_name).set_weights([new_w_conv2, b_conv2])
+        else:
+            w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
+            new_w_conv1,new_b_conv1=wider_conv2d_weight(
+                w_conv1,b_conv1,None,new_conv1_width,init
+            )
+            model.get_layer(new_name).set_weights([new_w_conv1,new_b_conv1])
     elif new_type == "fc":
         next_new_name = new_type + str(new_ind + 1)
         w_fc1, b_fc1 = teacher_model.get_layer(new_name).get_weights()
@@ -514,10 +565,10 @@ def make_deeper_student_model(teacher_model,
 
     teacher_model_dict = json.loads(teacher_model.to_json())
     student_model_dict = copy.deepcopy(teacher_model_dict)
-    name2ind,ind2name=get_name_ind_map(student_model_dict)
+    name2ind, ind2name = get_name_ind_map(student_model_dict)
 
     student_new_layer = copy.deepcopy(student_model_dict["config"][name2ind[new_name]])
-    student_new_layer["config"]["name"] = "^_"+ new_name
+    student_new_layer["config"]["name"] = "^_" + new_name
     if new_type == "conv":
         # student_new_layer["config"]["nb_filter"] # NO NEED
         pass
@@ -530,7 +581,7 @@ def make_deeper_student_model(teacher_model,
     if new_type == "conv" and init == 'net2deeper':
         prev_w, _ = teacher_model.get_layer(new_name).get_weights()
         new_weights = deeper_conv2d_weight(prev_w)
-        model.get_layer("^_"+new_name).set_weights(new_weights)
+        model.get_layer("^_" + new_name).set_weights(new_weights)
 
     ## copy weights for other layers
     copy_weights(teacher_model, model)
@@ -569,12 +620,12 @@ def copy_model(model):
 
 def make_model(teacher_model, commands, train_data, validation_data):
     student_model = copy_model(teacher_model)
-    student_model=shuffle_weights(student_model)
+    student_model = shuffle_weights(student_model)
     log = []
-    print "\n\n------------------------------\n\n"
+    print "\n------------------------------\n"
 
     for cmd in commands[1:]:
-        print "\n\n------------------------------\n\n"
+        print "\n------------------------------\n"
         # os.system("nvidia-smi")
         print "Attention: ", cmd
         # visualize_util.plot(student_model, to_file=str(int(time.time())) + '.pdf', show_shapes=True)
@@ -594,6 +645,7 @@ def make_model(teacher_model, commands, train_data, validation_data):
             raise ValueError('Unsupported cmd: %s' % cmd[0])
         # student_model.summary()
         # os.system("nvidia-smi")
+        print get_width(student_model)
         if history == None:
             continue
         # print raw_input("check mem")
@@ -642,6 +694,19 @@ def save_model_config(student_model, name):
     os.chdir("../../src")
 
 
+## a good example to combine tf
+def reset_weights(model):
+    session = K.get_session()
+    for layer in model.layers:
+        if isinstance(layer, Dense):
+            old = layer.get_weights()
+            layer.W.initializer.run(session=session)
+            layer.b.initializer.run(session=session)
+            print(np.array_equal(old, layer.get_weights()), " after initializer run")
+        else:
+            print(layer, "not reinitialized")
+
+
 def shuffle_weights(model, weights=None):
     """Randomly permute the weights in `model`, or the given `weights`.
 
@@ -663,6 +728,7 @@ def shuffle_weights(model, weights=None):
     return model
 
 
+## will be replace by tensorboard
 # def smooth(x, y):
 #     import matplotlib.pyplot as plt
 #     from scipy.optimize import curve_fit
@@ -679,21 +745,23 @@ def shuffle_weights(model, weights=None):
 #     return xx, yy_sg
 
 def vis(log0, log12, command):
-    acc0 = [0]+log0[0][-1]
+    acc0 = [0] + log0[0][-1]
     plt.clf()
     plt.close("all")
     plt.figure()
     # plt.hold(True)
     for log in log12:
         acc = acc0
-        plt.plot(np.arange(start=0,stop=len(acc)),np.array(acc))
+        plt.plot(np.arange(start=0, stop=len(acc)), np.array(acc))
         for log_item in log:
-            plt.plot(np.arange(start=len(acc),stop=len(acc+log_item[-1])),np.array(log_item[-1]))
+            plt.plot(np.arange(start=len(acc), stop=len(acc + log_item[-1])), np.array(log_item[-1]))
             acc += log_item[-1]
         acc = np.array(acc)
         print acc.shape
         np.save("val_acc.npy", acc)
     # plt.legend([command[0]])
+    _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", command[0])
+    subprocess.call(_shell_cmd.split())
     os.chdir(osp.join(root_dir, "output", command[0]))
 
     plt.savefig('val_acc.pdf')
