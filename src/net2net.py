@@ -751,7 +751,7 @@ def vis(log0, log12, command):
     plt.close("all")
     plt.figure()
     # plt.hold(True)
-    for log in log12:
+    for ind,log in enumerate(log12):
         acc = acc0
         plt.plot(np.arange(start=0, stop=len(acc)), np.array(acc))
         for log_item in log:
@@ -759,7 +759,7 @@ def vis(log0, log12, command):
             acc += log_item[-1]
         acc = np.array(acc)
         print(acc.shape)
-        np.save("val_acc.npy", acc)
+        np.save("val_acc"+str(ind)+".npy", acc)
     # plt.legend([command[0]])
     _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", command[0])
     subprocess.call(_shell_cmd.split())

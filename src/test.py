@@ -34,3 +34,18 @@ print([l.name for l in model.layers])
 print(model.get_layer("fc2"))
 save_model_config(model,"functional")
 
+def smooth(x,y):
+    print len(x),len(y)
+    import matplotlib.pyplot as plt
+    from scipy.optimize import curve_fit
+    from scipy.interpolate import interp1d
+    from scipy.signal import savgol_filter
+    import numpy as np
+    x,y=np.array(x),np.array(y)
+    # xx = np.linspace(x.min(), x.max(), x.shape[0])
+    xx=x
+    # interpolate + smooth
+    itp = interp1d(x, y, kind='linear')
+    window_size, poly_order = 101, 3
+    yy_sg = savgol_filter(itp(xx), window_size, poly_order)
+    return xx,yy_sg

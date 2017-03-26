@@ -86,30 +86,28 @@ if __name__ == "__main__":
         [l.name for l in teacher_model.layers],
         history.history["val_acc"] if history.history else[],
     ]]
-    for II in range(4):
+    for II in range(10):
         '''train net2net student model'''
         layer_names = [l.name for l in teacher_model.layers]
         possible_layer = []
         for layer in layer_names:
-            if layer[0:2]=="^_":
-                continue
-            layer_type = re.findall(r"^[a-z_]+", layer)
+            layer_type = re.findall(r"[a-z]+", layer)
             if len(layer_type) > 0 \
                     and layer_type[0] == "conv" or layer_type[0] == "fc":
                 possible_layer += [layer]
 
-        print("possible layer",possible_layer)
+        command = [re.sub(
+            r"\s",
+            "_",
+            datetime.datetime.now().ctime()
+        )]
 
-        name=re.sub(r"\s","_",datetime.datetime.now().ctime())
-        name=re.sub(r":","_",name)
-        command = [name]
-        print(command)
-        for I in range(np.random.randint(3,8)):
+        for I in range(24):
             possible_layer, cmd = rand_cmd(possible_layer)
             command.append(cmd)
 
         pprint(command)
-
+        print(possible_layer)
 
         student_model, log1 = make_model(teacher_model, command,
                                          train_data, validation_data)
