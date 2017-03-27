@@ -1,7 +1,5 @@
 # NetworkCompress
 
-**Move to [luzai/NetworkCompress](https://github.com/luzai/NetworkCompress)**
-
 Inspired by net2net, network distillation.
 
 ## Environment
