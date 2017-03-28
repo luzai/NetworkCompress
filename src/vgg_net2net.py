@@ -1,3 +1,4 @@
+from __future__ import print_function
 from net2net import *
 
 
@@ -35,7 +36,7 @@ if __name__ == "__main__":
 
     if args.dbg:
         args.nb_epoch = 1
-        args.gl_verbose = 2
+        args.gl_verbose = 0
         args.nb_teacher_epoch = 1
         np.random.seed(16)
     pprint(args)
@@ -56,25 +57,105 @@ if __name__ == "__main__":
     print(student_conv_width,student_fc_width)
     print(vgg_conv_width,vgg_fc_width)
 
-
+    commands=[]
     command = [
         "vgg_net2net",  # model name
-        ["net2deeper", "conv2", 0, args.gl_verbose],
+        ["net2deeper", "conv2",args.nb_epoch, args.gl_verbose], # conv1
+        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv3", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv4", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv5", args.nb_epoch, args.gl_verbose],
+        ["net2deeper", "conv6", args.nb_epoch, args.gl_verbose],
+        ["net2deeper", "conv7", args.nb_epoch, args.gl_verbose],
 
-        ["net2wider", "conv3", 2, 0, args.gl_verbose],
-        ["net2deeper", "conv3", 0, args.gl_verbose],
+        ["net2wider", "conv8", int(256 / 64.), args.nb_epoch, args.gl_verbose],
+        # command name, new layer, new width ratio, number of epoch
 
-        ["net2deeper", "conv4", 0, args.gl_verbose],
-        ["net2wider", "conv5", 2, 0, args.gl_verbose],
-        ["net2deeper", "conv5", 0, args.gl_verbose],
-        ["net2deeper", "conv6", 0, args.gl_verbose],
-        ["net2deeper", "conv7", 0, args.gl_verbose],
+        ["net2wider", "conv3",2, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv4", 2, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv5",4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv6",4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv7", 4,args.nb_epoch, args.gl_verbose],
 
-        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],
+
         ["net2wider", "fc1",int(2048./64), args.nb_epoch, args.gl_verbose],
         ["net2wider", "fc2", int(1024. / 64), args.nb_epoch, args.gl_verbose]
 
     ]
-    student_model, log1 = make_model(teacher_model, command,
-                                     train_data, validation_data)
-    print(get_width(student_model))
+    commands+=[command]
+    command = [
+        "vgg_net2net1",  # model name
+        ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv3", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv4", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv5", args.nb_epoch, args.gl_verbose],
+        ["net2deeper", "conv6", args.nb_epoch, args.gl_verbose],
+        ["net2deeper", "conv7", args.nb_epoch, args.gl_verbose],
+
+        ["net2wider", "conv3", 2, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv4", 2, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv5", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv6", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv7", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv8", int(256 / 64.), args.nb_epoch, args.gl_verbose],
+        # command name, new layer, new width ratio, number of epoch
+
+        ["net2wider", "fc1", int(2048. / 64), args.nb_epoch, args.gl_verbose],
+        ["net2wider", "fc2", int(1024. / 64), args.nb_epoch, args.gl_verbose]
+
+    ]
+    commands += [command]
+    command = [
+        "vgg_net2net2",  # model name
+        ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv3", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv4", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv5", args.nb_epoch, args.gl_verbose],
+        ["net2deeper", "conv6", args.nb_epoch, args.gl_verbose],
+        ["net2deeper", "conv7", args.nb_epoch, args.gl_verbose],
+
+        ["net2wider", "conv8", int(256 / 64.), args.nb_epoch, args.gl_verbose],
+        # command name, new layer, new width ratio, number of epoch
+        ["net2wider", "conv7", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv6", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv5", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv4", 2, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv3", 2, args.nb_epoch, args.gl_verbose],
+
+        ["net2wider", "fc2", int(1024. / 64), args.nb_epoch, args.gl_verbose],
+        ["net2wider", "fc1", int(2048. / 64), args.nb_epoch, args.gl_verbose]
+    ]
+    commands += [command]
+    command = [
+        "vgg_net2net3",  # model name
+        ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv3", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv4", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2deeper", "conv5", args.nb_epoch, args.gl_verbose],
+        ["net2deeper", "conv6", args.nb_epoch, args.gl_verbose],
+        ["net2deeper", "conv7", args.nb_epoch, args.gl_verbose],
+
+        ["net2wider", "conv3", 2, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv4", 2, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv5", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv6", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv7", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv8", int(256 / 64.), args.nb_epoch, args.gl_verbose],
+        # command name, new layer, new width ratio, number of epoch
+
+        ["net2wider", "fc1", int(2048. / 64), args.nb_epoch, args.gl_verbose],
+        ["net2wider", "fc2", int(1024. / 64), args.nb_epoch, args.gl_verbose]
+
+    ]
+    commands += [command]
+
+    for command in commands:
+        print (command)
+        student_model, log1 = make_model(teacher_model, command,
+                                         train_data, validation_data)
+        print(get_width(student_model))
+        vis(log0,[log1],command)
+

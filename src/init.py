@@ -1,4 +1,5 @@
 # lazy import ...
+from __future__ import print_function
 print("init")
 import matplotlib, sys, os, \
     glob, cPickle, scipy, \

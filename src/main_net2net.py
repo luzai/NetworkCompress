@@ -1,3 +1,4 @@
+from __future__ import print_function
 from net2net import *
 
 
@@ -45,7 +46,8 @@ if __name__ == "__main__":
     log0 = [[
         "make_teacher",
         [l.name for l in teacher_model.layers],
-        history.history["val_logits_acc"] if history.history else[],
+        # history.history["val_logits_acc"] if history.history else[],
+        history.history["val_acc"] if history.history else[],
     ]]
 
     '''train net2net student model'''
@@ -71,6 +73,6 @@ if __name__ == "__main__":
     #                                  train_data, validation_data)
 
     '''print log'''
-    # map(lambda x: pprint(x, indent=2), ["\n", log0, "\n", log1])
-    #
-    # vis(log0, [log1],command)
+    map(lambda x: pprint(x, indent=2), ["\n", log0, "\n", log1])
+
+    vis(log0, [log1],command)

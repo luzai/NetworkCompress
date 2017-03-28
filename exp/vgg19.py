@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
+
 '''VGG19 model for Keras.
 
 # Reference:
@@ -22,9 +24,8 @@ from keras import backend as K
 # from imagenet_utils import decode_predictions, preprocess_input
 nb_class = 10  # number of class
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
-early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
+early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5)
 csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
-batch_szie = 128
 
 def ori_vgg():
 
@@ -80,37 +81,46 @@ def modified_vgg():
     x = Convolution2D(64, 3, 3, activation='relu', border_mode='same', name='block1_conv1')(img_input)
     # x=BatchNormalization()(x)
     x = Convolution2D(64, 3, 3, activation='relu', border_mode='same', name='block1_conv2')(x)
+    # x = BatchNormalization()(x)
     x = MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool')(x)
-    x=Dropout(0.25)(x)
+    # x=Dropout(0.25)(x)
 
     # Block 2
     x = Convolution2D(128, 3, 3, activation='relu', border_mode='same', name='block2_conv1')(x)
+    # x = BatchNormalization()(x)
     x = Convolution2D(128, 3, 3, activation='relu', border_mode='same', name='block2_conv2')(x)
+    # x = BatchNormalization()(x)
     x = MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool')(x)
-    x = Dropout(0.25)(x)
+    # x = Dropout(0.25)(x)
 
     # Block 3
     x = Convolution2D(256, 3, 3, activation='relu', border_mode='same', name='block3_conv1')(x)
+    # x = BatchNormalization()(x)
     x = Convolution2D(256, 3, 3, activation='relu', border_mode='same', name='block3_conv2')(x)
+    # x = BatchNormalization()(x)
     x = Convolution2D(256, 3, 3, activation='relu', border_mode='same', name='block3_conv3')(x)
+    # x = BatchNormalization()(x)
     x = Convolution2D(256, 3, 3, activation='relu', border_mode='same', name='block3_conv4')(x)
+    # x = BatchNormalization()(x)
     x = MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool')(x)
-    x = Dropout(0.25)(x)
+    # x = Dropout(0.25)(x)
 
     # Classification block
     x = Flatten(name='flatten')(x)
     x = Dense(2048, activation='relu', name='fc1')(x)
-    x=Dropout(0.5)(x)
+    # x = BatchNormalization()(x)
+    # x = Dropout(0.5)(x)
     x = Dense(1024, activation='relu', name='fc2')(x)
-    x = Dropout(0.5)(x)
+    # x = Dropout(0.5)(x)
     x = Dense(10, activation='softmax', name='predictions')(x)
     model = Model(img_input, x)
     return model
 
-train_data, validation_data = load_data(dbg=False)
+train_data, validation_data = load_data(dbg=1)
 
 # Create model
 model=modified_vgg()
+# model=ori_vgg()
 model.compile(loss='categorical_crossentropy',
               optimizer=SGD(lr=0.01, momentum=0.9),
               metrics=['accuracy'])
@@ -122,15 +132,16 @@ datagen = ImageDataGenerator(
     featurewise_std_normalization=False,  # divide inputs by std of the dataset
     samplewise_std_normalization=False,  # divide each input by its std
     zca_whitening=False,  # apply ZCA whitening
-    rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
+    rotation_range=2,  # randomly rotate images in the range (degrees, 0 to 180)
     width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
     height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
     horizontal_flip=True,  # randomly flip images
-    vertical_flip=False)  # randomly flip images
+    vertical_flip=False,
+    channel_shift_range=0.001)  # randomly flip images
 
 datagen.fit(train_data[0])
 history=model.fit_generator(datagen.flow(train_data[0], train_data[1],
-                                         batch_size=128),
+                                         batch_size=batch_size),
                             samples_per_epoch=train_data[0].shape[0],
                             nb_epoch=200,
                             validation_data=validation_data,

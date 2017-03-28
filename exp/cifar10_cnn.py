@@ -62,8 +62,8 @@ def reset_weights(model):
             print(layer, "not reinitialized")
 
 sav=[]
-for use_dropout in [False]:
-    for data_augmentation in [False]:
+for use_dropout in [True,False]:
+    for data_augmentation in [True,False]:
         if 'model' in locals():
             del model
         model = Sequential()

@@ -1,26 +1,35 @@
 # NetworkCompress
 
 Inspired by net2net, network distillation.
+Contributor: @luzai, @miibotree
 
 ## Environment
-- keras 1.2.2: rather than keras 2.0.1, it seems `resnet.py` depends on keras 1
-- backend: theano for its speed on GPU. Also consider tf+cuda-8.0 for debug. 
-- Memory: I think `[lib] cnmem=0.1` is enough (for cifar-10).
+- keras 1.2.2
+- backend: theano for its speed on GPU. Also consider tensorflow for visualization. 
+- Memory: `[lib] cnmem=0.1` is enough (for cifar-10).
 
 
 ## TODO list:
-- Dateaugment is better than dropout, more experiments. Also consider batch norm.
-- Gradient explosion, happen when fc is too deep. To be verify.
+
 - Grow Architecture to VGG-like
-    - Exp: what accuracy can vgg-19 achieve
-    - Grow by net2net v.s. Grow by rand init v.s. Straight train from big module. Compare on Accuracy and Train Speed(Using EarlyStop)
+    - [x] Exp: what accuracy can vgg-19 achieve
+    - [ ] amend slight downgrade of net2wider conv8
+    - compare on accuracy and training time
+    
+|Vgg16|Vgg8|Vgg8+Dropout|Vgg8-net2net(no dropout, partially train)|
+|--|--|---|---|
+|10.00%|83.56%|90.05%|85.45%|
+
+![](./demo/vgg_net2net.png)
+**Figure 1** Vgg8-net2net(no dropout, partially train)
+
 - Use kd loss
   - [x] Train(65770): hard label + transfer label; Test(10000): cifar-10 hard label 
   - [ ] [wait] use `functional API` rather than `sequence`
   - hard label + soft-target (tune hyper-parameter T)
 - experiments on  comparing two type models:
-  - left --> right , up --> down
-  - diag grow
+  - Deeper(Different orders) -> Wider
+  - Wider -> Deeper
 
 - write `net2branch` function, imitating inception module
 - net2deeper for pooling layer
@@ -33,4 +42,5 @@ Inspired by net2net, network distillation.
 - experiments on random generate model
   - [x] generate random feasible command 
   - [x] check the completeness, run code parallel
-  - find some rules
+  - [x] find some rules: Gradient explosion happens when fc is too deep
+- [x] Data-augmentation is better than Dropout.
