@@ -5,6 +5,12 @@
 .idea/
 *.JPEG
 *.model
+*.log*
+*.json
+*.png
+*.pdf
+*.pkl
+*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

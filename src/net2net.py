@@ -1,9 +1,11 @@
 # !/usr/bin/env python
+from __future__ import print_function
 from init import *
 
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, Convolution2D
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, \
+    Convolution2D,Embedding
 from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
 from keras.utils import np_utils, visualize_util
@@ -15,9 +17,9 @@ from load_transfer_data import get_transfer_data
 input_shape = (3, 32, 32)  # image shape
 nb_class = 10  # number of class
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
-early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
+early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=3)
 csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
-batch_szie = 128
+batch_size = 512
 
 
 # load and pre-process data
@@ -43,16 +45,16 @@ def limit_data(x, division):
 def check_data_format(train_data, test_data):
     if len(train_data[1]) == 2:
         print("train_img.shape", train_data[0].shape,
-            "\ntrain_logits", train_data[1][0].shape,
-            "\ntrain_label", train_data[1][1].shape)
+              "\ntrain_logits", train_data[1][0].shape,
+              "\ntrain_label", train_data[1][1].shape)
         print("test_img.shape", test_data[0].shape,
-            "\ntest_logits", test_data[1][0].shape,
-            "\ntest_label", test_data[1][1].shape)
+              "\ntest_logits", test_data[1][0].shape,
+              "\ntest_label", test_data[1][1].shape)
     else:
         print("train_img.shape", train_data[0].shape,
-            "\ntrain_y", train_data[1].shape)
+              "\ntrain_y", train_data[1].shape)
         print("test_img.shape", test_data[0].shape,
-            "\ntest_y", test_data[1].shape)
+              "\ntest_y", test_data[1].shape)
 
 
 def load_data(dbg=False):
@@ -72,10 +74,65 @@ def load_data(dbg=False):
 
     train_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_transfer.npy")))
     test_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_test.npy")))
-    print ('train_logits.shape: ', train_logits.shape)
-    print ('test_logits.shape: ', test_logits.shape)
+    print('train_logits.shape: ', train_logits.shape)
+    print('test_logits.shape: ', test_logits.shape)
 
     if dbg:
+        train_x, train_y, \
+        test_x, test_y, \
+        train_logits, test_logits \
+            = map(lambda x: limit_data(x, division=9999), [train_x, train_y,
+                                                           test_x, test_y,
+                                                           train_logits, test_logits]
+                  )
+    else:
+        '''For speedup'''
+        train_x, train_y, \
+        test_x, test_y, \
+        train_logits, test_logits \
+            = map(lambda x: limit_data(x, division=5), [train_x, train_y,
+                                                        test_x, test_y,
+                                                        train_logits, test_logits]
+                  )
+    # train_data = (train_x, [train_logits, train_y])
+    # test_data = (test_x, [test_logits, test_y])
+    print("\n\n---------------------------------------\n\n")
+
+    train_data = (train_x, train_y)
+    test_data = (test_x, test_y)
+    check_data_format(train_data, test_data)
+
+    return train_data, test_data
+
+
+def load_data(dbg=False):
+    transfer_x, transfer_y = get_transfer_data(osp.join(root_dir, "data", "transfer_data"))
+    transfer_y = transfer_y.reshape((-1, 1))
+    (train_x, train_y), (test_x, test_y) = cifar10.load_data()
+    train_x = np.concatenate((train_x, transfer_x))
+    train_y = np.concatenate((train_y, transfer_y))
+    # test_x = np.concatenate((test_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
+    # test_y = np.concatenate((test_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
+
+    '''Train and Test use the same mean img'''
+    train_x, mean_image = preprocess_input(train_x, None)
+    test_x, _ = preprocess_input(test_x, mean_image)
+
+    train_y, test_y = map(preprocess_output, [train_y, test_y])
+
+    train_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_transfer.npy")))
+    test_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_test.npy")))
+    print('train_logits.shape: ', train_logits.shape)
+    print('test_logits.shape: ', test_logits.shape)
+    if not isinstance(dbg, bool):
+        train_x, train_y, \
+        test_x, test_y, \
+        train_logits, test_logits \
+            = map(lambda x: limit_data(x, division=dbg), [train_x, train_y,
+                                                          test_x, test_y,
+                                                          train_logits, test_logits]
+                  )
+    elif dbg == True:
         train_x, train_y, \
         test_x, test_y, \
         train_logits, test_logits \
@@ -132,17 +189,21 @@ def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
         init: initialization algorithm for new weights,
           either 'random-pad' or 'net2wider'
     '''
+    # with open("debug.pkl", "w") as f:
+    #     cPickle.dump([teacher_w1, teacher_b1, teacher_w2, new_width], f)
     if teacher_w2 is None:
         n = new_width - teacher_w1.shape[0]
         index = np.random.randint(teacher_w1.shape[0], size=n)
         factors = np.bincount(index)[index] + 1.
-        new_w1 = teacher_w1[index, :, :, :]
+        new_w1 = teacher_w1[index, :, :, :] / factors.reshape((-1, 1, 1, 1))
         noise = np.random.normal(0, 5e-2 * new_w1.std(), size=new_w1.shape)
-        student_w1 = np.concatenate((teacher_w1, new_w1+noise), axis=0)
+        student_w1 = np.concatenate((teacher_w1, new_w1 + noise), axis=0)
+        student_w1[index, :, :, :] = new_w1
 
-        new_b1 = teacher_b1[index]
+        new_b1 = teacher_b1[index] / factors
         noise = np.random.normal(0, 5e-2 * new_b1.std(), size=new_b1.shape)
-        student_b1 = np.concatenate((teacher_b1, new_b1+noise), axis=0)
+        student_b1 = np.concatenate((teacher_b1, new_b1 + noise), axis=0)
+        student_b1[index] = new_b1
 
         return student_w1, student_b1
     else:
@@ -198,6 +259,7 @@ def wider_fc_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
         init: initialization algorithm for new weights,
           either 'random-pad' or 'net2wider'
     '''
+
     assert teacher_w1.shape[1] == teacher_w2.shape[0], (
         'successive layers from teacher model should have compatible shapes')
     assert teacher_w1.shape[1] == teacher_b1.shape[0], (
@@ -205,7 +267,8 @@ def wider_fc_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
     # new_width=teacher_w1.shape[1] * new_width_ratio
     assert new_width > teacher_w1.shape[1], (
         'new width (nout) should be bigger than the existing one')
-
+    # with open("debug.pkl","w") as f:
+    #     cPickle.dump([teacher_w1, teacher_b1, teacher_w2, new_width],f)
     n = new_width - teacher_w1.shape[1]
     if init == 'random-pad':
         new_w1 = np.random.normal(0, 0.1, size=(teacher_w1.shape[0], n))
@@ -289,13 +352,33 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
     shuffle_weights(model)
     print([l.name for l in model.layers])
     # save_model_config(model,"sequential")
-    history = model.fit(
-        *(train_data),
-        nb_epoch=nb_epoch,
-        validation_data=validation_data,
-        verbose=verbose,
-        callbacks=[lr_reducer, early_stopper, csv_logger]
-    )
+    datagen = ImageDataGenerator(
+        featurewise_center=False,  # set input mean to 0 over the dataset
+        samplewise_center=False,  # set each sample mean to 0
+        featurewise_std_normalization=False,  # divide inputs by std of the dataset
+        samplewise_std_normalization=False,  # divide each input by its std
+        zca_whitening=False,  # apply ZCA whitening
+        rotation_range=2,  # randomly rotate images in the range (degrees, 0 to 180)
+        width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
+        height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
+        horizontal_flip=True,  # randomly flip images
+        vertical_flip=False,
+        channel_shift_range=0.001)  # randomly flip images
+
+    datagen.fit(train_data[0])
+    history = model.fit_generator(datagen.flow(train_data[0], train_data[1],
+                                               batch_size=batch_size),
+                                  samples_per_epoch=train_data[0].shape[0],
+                                  nb_epoch=nb_epoch,
+                                  validation_data=validation_data,
+                                  verbose=2, callbacks=[lr_reducer, early_stopper, csv_logger])
+    # history = model.fit(
+    #     *(train_data),
+    #     nb_epoch=nb_epoch,
+    #     validation_data=validation_data,
+    #     verbose=verbose,
+    #     callbacks=[lr_reducer, early_stopper, csv_logger],batch_size=batch_size
+    # )
 
     return model, history
 
@@ -315,18 +398,19 @@ def get_name_ind_map(student_model_dict):
                     for i in range(len(student_model_dict["config"]))]
     return name2ind, ind2name
 
-def get_width(model):
-    mdict=json.loads(model.to_json())
-    name2ind,ind2name=get_name_ind_map(mdict)
-    student_conv_width=[]
-    student_fc_width=[]
-    for i,v in enumerate(ind2name):
 
-        if mdict["config"][i]["class_name"]=="Convolution2D":
-            student_conv_width+=[get_config(mdict,i,"nb_filter")]
-        elif mdict["config"][i]["class_name"]=="Dense":
+def get_width(model):
+    mdict = json.loads(model.to_json())
+    name2ind, ind2name = get_name_ind_map(mdict)
+    student_conv_width = []
+    student_fc_width = []
+    for i, v in enumerate(ind2name):
+
+        if mdict["config"][i]["class_name"] == "Convolution2D":
+            student_conv_width += [get_config(mdict, i, "nb_filter")]
+        elif mdict["config"][i]["class_name"] == "Dense":
             student_fc_width += [get_config(mdict, i, "output_dim")]
-    return student_conv_width,student_fc_width
+    return student_conv_width, student_fc_width
 
 
 def get_config(dict, modify_layer, property):
@@ -363,17 +447,18 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
     # student_model_dict=teacher_model_dict
 
     CONV_WIDTH_LIMITS = 512
+    old_conv1_width = get_config(student_model_dict, modify_layer_name, "nb_filter")
     new_conv1_width = min(
         CONV_WIDTH_LIMITS,
         int(
             new_conv1_width_ratio
-            * get_config(student_model_dict, modify_layer_name, "nb_filter")
+            * old_conv1_width
         )
     )
     set_config(student_model_dict, modify_layer_name, "nb_filter", new_conv1_width)
     # No need:
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
-    return student_model_dict, new_conv1_width, new_conv1_width == CONV_WIDTH_LIMITS
+    return student_model_dict, new_conv1_width, new_conv1_width == CONV_WIDTH_LIMITS or new_conv1_width == old_conv1_width
 
 
 def to_uniform_init_dict(student_model_dict):
@@ -397,11 +482,10 @@ def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     student_model_dict = copy.deepcopy(teacher_model_dict)
     # student_model_dict=teacher_model_dict
     FC_WIDTH_LIMITS = 4096
-    old_fc1_width = new_fc1_width_ratio * \
-                    get_config(student_model_dict, modify_layer_name, "output_dim")
+    old_fc1_width = get_config(student_model_dict, modify_layer_name, "output_dim")
     new_fc1_width = min(
         FC_WIDTH_LIMITS,
-        int(old_fc1_width)
+        int(new_fc1_width_ratio * (old_fc1_width))
     )
     set_config(student_model_dict, modify_layer_name, "output_dim", new_fc1_width)
     set_config(student_model_dict, modify_layer_name, "init", "glorot_uniform")
@@ -487,6 +571,7 @@ def make_wider_student_model(teacher_model,
     '''Train a wider student model based on teacher_model,
        with either 'random-pad' (baseline) or 'net2wider'
     '''
+    print([l.name for l in teacher_model.layers])
     new_type = re.findall(r"[a-z]+", new_name)[0]
     assert new_type == "conv" or new_type == "fc"
     new_ind = re.findall(r"\d+", new_name)[0]
@@ -525,10 +610,10 @@ def make_wider_student_model(teacher_model,
             model.get_layer(next_new_name).set_weights([new_w_conv2, b_conv2])
         else:
             w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
-            new_w_conv1,new_b_conv1=wider_conv2d_weight(
-                w_conv1,b_conv1,None,new_conv1_width,init
+            new_w_conv1, new_b_conv1 = wider_conv2d_weight(
+                w_conv1, b_conv1, None, new_conv1_width, init
             )
-            model.get_layer(new_name).set_weights([new_w_conv1,new_b_conv1])
+            model.get_layer(new_name).set_weights([new_w_conv1, new_b_conv1])
     elif new_type == "fc":
         next_new_name = new_type + str(new_ind + 1)
         w_fc1, b_fc1 = teacher_model.get_layer(new_name).get_weights()
@@ -542,14 +627,33 @@ def make_wider_student_model(teacher_model,
                   optimizer=SGD(lr=0.001, momentum=0.9),
                   metrics=['accuracy'])
     print([l.name for l in model.layers])
+    datagen = ImageDataGenerator(
+        featurewise_center=False,  # set input mean to 0 over the dataset
+        samplewise_center=False,  # set each sample mean to 0
+        featurewise_std_normalization=False,  # divide inputs by std of the dataset
+        samplewise_std_normalization=False,  # divide each input by its std
+        zca_whitening=False,  # apply ZCA whitening
+        rotation_range=2,  # randomly rotate images in the range (degrees, 0 to 180)
+        width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
+        height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
+        horizontal_flip=True,  # randomly flip images
+        vertical_flip=False,
+        channel_shift_range=0.001)  # randomly flip images
 
-    history = model.fit(
-        *(train_data),
-        nb_epoch=nb_epoch,
-        validation_data=validation_data,
-        verbose=verbose if nb_epoch != 0 else 0,
-        callbacks=[lr_reducer, early_stopper, csv_logger]
-    )
+    datagen.fit(train_data[0])
+    history = model.fit_generator(datagen.flow(train_data[0], train_data[1],
+                                               batch_size=batch_size),
+                                  samples_per_epoch=train_data[0].shape[0],
+                                  nb_epoch=nb_epoch,
+                                  validation_data=validation_data,
+                                  verbose=2, callbacks=[lr_reducer, early_stopper, csv_logger])
+    # history = model.fit(
+    #     *(train_data),
+    #     nb_epoch=nb_epoch,
+    #     validation_data=validation_data,
+    #     verbose=verbose if nb_epoch != 0 else 0,
+    #     callbacks=[lr_reducer, early_stopper, csv_logger],batch_size=batch_size
+    # )
 
     return model, history
 
@@ -561,6 +665,7 @@ def make_deeper_student_model(teacher_model,
     '''Train a deeper student model based on teacher_model,
        with either 'random-init' (baseline) or 'net2deeper'
     '''
+    print([l.name for l in teacher_model.layers])
     new_type = re.findall(r"[a-z]+", new_name)[0]
     new_ind = int(re.findall(r"\d+", new_name)[0])
 
@@ -593,14 +698,32 @@ def make_deeper_student_model(teacher_model,
                   optimizer=SGD(lr=0.001, momentum=0.9),
                   metrics=['accuracy'])
     print([l.name for l in model.layers])
-
-    history = model.fit(
-        *(train_data),
-        nb_epoch=nb_epoch,
-        validation_data=validation_data,
-        verbose=verbose if nb_epoch != 0 else 0,
-        callbacks=[lr_reducer, early_stopper, csv_logger]
-    )
+    datagen = ImageDataGenerator(
+        featurewise_center=False,  # set input mean to 0 over the dataset
+        samplewise_center=False,  # set each sample mean to 0
+        featurewise_std_normalization=False,  # divide inputs by std of the dataset
+        samplewise_std_normalization=False,  # divide each input by its std
+        zca_whitening=False,  # apply ZCA whitening
+        rotation_range=2,  # randomly rotate images in the range (degrees, 0 to 180)
+        width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
+        height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
+        horizontal_flip=True,  # randomly flip images
+        vertical_flip=False,
+        channel_shift_range=0.001)  # randomly flip images
+    datagen.fit(train_data[0])
+    history = model.fit_generator(datagen.flow(train_data[0], train_data[1],
+                                               batch_size=batch_size),
+                                  samples_per_epoch=train_data[0].shape[0],
+                                  nb_epoch=nb_epoch,
+                                  validation_data=validation_data,
+                                  verbose=2, callbacks=[lr_reducer, early_stopper, csv_logger])
+    # history = model.fit(
+    #     *(train_data),
+    #     nb_epoch=nb_epoch,
+    #     validation_data=validation_data,
+    #     verbose=verbose if nb_epoch != 0 else 0,
+    #     callbacks=[lr_reducer, early_stopper, csv_logger],batch_size=batch_size
+    # )
 
     return model, history
 
@@ -621,14 +744,15 @@ def copy_model(model):
 
 def make_model(teacher_model, commands, train_data, validation_data):
     student_model = copy_model(teacher_model)
-    student_model = shuffle_weights(student_model)
+    # student_model = shuffle_weights(student_model)
     log = []
     print("\n------------------------------\n")
 
     for cmd in commands[1:]:
         print("\n------------------------------\n")
-        # os.system("nvidia-smi")
+        os.system("nvidia-smi")
         print("Attention: ", cmd)
+        print(get_width(student_model))
         # visualize_util.plot(student_model, to_file=str(int(time.time())) + '.pdf', show_shapes=True)
         if cmd[0] == "net2wider" or cmd[0] == "random-pad":
             student_model, history = make_wider_student_model(
@@ -644,8 +768,8 @@ def make_model(teacher_model, commands, train_data, validation_data):
             )
         else:
             raise ValueError('Unsupported cmd: %s' % cmd[0])
-        # student_model.summary()
-        # os.system("nvidia-smi")
+        student_model.summary()
+        os.system("nvidia-smi")
         print(get_width(student_model))
         if history == None:
             continue
@@ -751,7 +875,7 @@ def vis(log0, log12, command):
     plt.close("all")
     plt.figure()
     # plt.hold(True)
-    for ind,log in enumerate(log12):
+    for ind, log in enumerate(log12):
         acc = acc0
         plt.plot(np.arange(start=0, stop=len(acc)), np.array(acc))
         for log_item in log:
@@ -759,7 +883,7 @@ def vis(log0, log12, command):
             acc += log_item[-1]
         acc = np.array(acc)
         print(acc.shape)
-        np.save("val_acc"+str(ind)+".npy", acc)
+        np.save("val_acc" + str(ind) + ".npy", acc)
     # plt.legend([command[0]])
     _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", command[0])
     subprocess.call(_shell_cmd.split())
