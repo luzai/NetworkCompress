@@ -1,63 +1,118 @@
+# coding: utf-8
+import sys
+sys.path.insert(0,"/home/xlwang/NetworkCompress/src")
 from net2net import *
+input_shape=(64,16,16)
 
-train_data, test_data = load_data(True)
+def make_model_for_conv_fc(width):
+    input_node=Input(shape=(input_shape),name="input")
+    x = Convolution2D(64, 3, 3, name='conv7'
+                      # ,activation='relu'
+                      )(input_node)
+    x=Convolution2D(width,3,3,name='conv8'
+                    # ,activation='relu'
+                    )(x)
+    # x=MaxPooling2D(name='pool8')(x)
+    # x=Dropout(0.25)(x)
+    x=Flatten(name="flatten")(x)
+    output_node=Dense(64,name='fc1'
+            # ,activation='relu'
+            )(x)
+    model=Model(input=input_node,output=output_node)
+    model.trainable=False
+    return model
 
-image_input = Input(shape=input_shape)
+def make_model_for_conv_conv(width):
+    input_node=Input(shape=(input_shape),name="input")
+    x = Convolution2D(width, 3, 3, name='conv7'
+                      # ,activation='relu'
+                      )(input_node)
+    x=Convolution2D(256,3,3,name='conv8'
+                    # ,activation='relu'
+                    )(x)
+    # x=MaxPooling2D(name='pool8')(x)
+    # x=Dropout(0.25)(x)
+    x=Flatten(name="flatten")(x)
+    output_node=Dense(64,name='fc1'
+            # ,activation='relu'
+            )(x)
+    model=Model(input=input_node,output=output_node)
+    model.trainable=False
+    return model
 
-conv1 = Conv2D(64, 3, 3,
-               border_mode='same', name='conv1', activation='relu')(image_input)
-pool1 = MaxPooling2D(name='pool1')(conv1)
-drop1 = Dropout(0.25,name='drop1')(pool1)
 
-conv2 = Conv2D(64, 3, 3, border_mode='same', name='conv2', activation='relu')(drop1)
-pool2 = MaxPooling2D(name='pool2')(conv2)
-drop2 = Dropout(0.25)(pool2)
+np.random.seed(1)
+model=make_model_for_conv_conv(64)
+input_inst=np.random.random((1,)+input_shape)
+output_inst=K.function(inputs=[model.input, K.learning_phase()], outputs=[model.output])([input_inst,0])
+# plt.switch_backend("TkAgg")
+# get_ipython().magic(u'matplotlib inline')
+print output_inst[0].ravel()[:5]
+plt.figure()
+plt.imshow(input_inst[0][0])
+plt.figure()
+plt.imshow(output_inst[0])
+_=plt.axis("off")
 
-flatten = Flatten(name='flatten')(drop2)
-fc1 = Dense(64, activation='relu', name='fc1')(flatten)
-fc1_drop1 = Dropout(0.5)(fc1)
-logits = Dense(nb_class, name='logits')(fc1_drop1)
-output = Activation('softmax', name='softmax')(logits)
 
-model = Model(input=image_input, output=output)
+model2=make_model_for_conv_conv(256)
+print [l.name for l in model.layers]
+print [l.name for l in model2.layers]
 
-model.compile(loss=['categorical_crossentropy'],
-              loss_weights=[1],
-              optimizer=SGD(lr=0.01, momentum=0.9),
-              metrics=['accuracy'])
-print([l.name for l in model.layers])
-history = model.fit(
-    train_data[0], train_data[1],
-    nb_epoch=200,
-    validation_data=test_data,
-    verbose=2,
-    callbacks=[lr_reducer, early_stopper, csv_logger],
-    batch_size=batch_size
-)
-print history.history
 
-func=K.function(inputs=[model.input,K.learning_phase()], outputs=[model.get_layer("conv2").output])
-x = func([np.random.rand(*(1,3,32,32)),1]) # ok
-x = func([image_input,1])[0] # error TypeError: ('Bad input argument to theano function with name "/usr/lib/python2.7/site-packages/keras/backend/theano_backend.py:955"  at index 0(0-based)', 'Expected an array-like object, but found a Variable: maybe you are trying to call a function on a (possibly shared) variable instead of a numeric array?')
+copy_weights(student_model=model2,teacher_model=model)
+w_conv1, b_conv1 = model.get_layer("conv7").get_weights()
+w_conv2, b_conv2 = model.get_layer("conv8").get_weights()
+new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
+    w_conv1, b_conv1, w_conv2, 256, "net2wider")
+model2.get_layer("conv7").set_weights([new_w_conv1, new_b_conv1])
+model2.get_layer("conv8").set_weights([new_w_conv2, b_conv2])
 
-x = Conv2D(64, 3, 3, border_mode='same', name='conv2', activation='relu')(x)
-x = Dropout(0.25)(x)
-output = K.function(inputs=[model.get_layer("flatten").input,K.learning_phase()], outputs=[model.output])(x)
+output_inst2=K.function(inputs=[model2.input, K.learning_phase()], outputs=[model2.output])([input_inst,0])
+# plt.switch_backend("TkAgg")
+# get_ipython().magic(u'matplotlib inline')
+print output_inst2[0].ravel()[:5]
+plt.figure()
+plt.imshow(output_inst2[0])
+_=plt.axis("off")
 
-new_model = Model(input=image_input, output=output)
-new_model.compile(loss=['categorical_crossentropy'],
-              loss_weights=[1],
-              optimizer=SGD(lr=0.01, momentum=0.9),
-              metrics=['accuracy'])
-print([l.name for l in new_model.layers])
-history = new_model.fit(
-    train_data[0], train_data[1],
-    nb_epoch=200,
-    validation_data=test_data,
-    verbose=2,
-    callbacks=[lr_reducer, early_stopper, csv_logger],
-    batch_size=batch_size
-)
-save_model_config(new_model, "functional")
+print output_inst[0].sum(),output_inst[0].sum()
 
+np.random.seed(1)
+model=make_model_for_conv_fc(64)
+input_inst=np.random.random((1,)+input_shape)
+output_inst=K.function(inputs=[model.input, K.learning_phase()], outputs=[model.output])([input_inst,0])
+# plt.switch_backend("TkAgg")
+# get_ipython().magic(u'matplotlib inline')
+print output_inst[0].ravel()[:5]
+plt.figure()
+plt.imshow(input_inst[0][0])
+plt.figure()
+plt.imshow(output_inst[0])
+_=plt.axis("off")
+
+model2=make_model_for_conv_fc(256)
+print [l.name for l in model.layers]
+print [l.name for l in model2.layers]
+
+copy_weights(student_model=model2,teacher_model=model)
+w_conv1, b_conv1 = model.get_layer("conv8").get_weights()
+new_w_conv1, new_b_conv1 = wider_conv2d_weight(
+                w_conv1, b_conv1, None, 256, "net2wider"
+            )
+model2.get_layer("conv8").set_weights([new_w_conv1, new_b_conv1])
+
+output_inst2=K.function(inputs=[model2.input, K.learning_phase()], outputs=[model2.output])([input_inst,0])
+# plt.switch_backend("TkAgg")
+# get_ipython().magic(u'matplotlib inline')
+print output_inst2[0].ravel()[:5]
+plt.figure()
+plt.imshow(output_inst2[0])
+_=plt.axis("off")
+
+print output_inst[0].sum(),output_inst[0].sum()
+plt.figure()
+plt.plot(output_inst[0][0])
+plt.plot(output_inst2[0][0])
+plt.legend(["before","after"])
 

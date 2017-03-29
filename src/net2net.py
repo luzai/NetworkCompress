@@ -19,7 +19,7 @@ nb_class = 10  # number of class
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
 early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=3)
 csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
-batch_size = 512
+batch_size = 128
 
 
 # load and pre-process data
