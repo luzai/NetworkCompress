@@ -151,7 +151,9 @@ if __name__ == "__main__":
 
     ]
     commands += [command]
-
+    for command in commands:
+        print(len(command)-1)
+    exit(-1)
     for command in commands:
         print (command)
         student_model, log1 = make_model(teacher_model, command,

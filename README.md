@@ -1,6 +1,7 @@
 # NetworkCompress
 
 Inspired by net2net, network distillation.
+
 Contributor: @luzai, @miibotree
 
 ## Environment
@@ -16,12 +17,15 @@ Contributor: @luzai, @miibotree
     - [ ] amend slight downgrade of net2wider conv8
     - compare on accuracy and training time
     
-|Vgg16|Vgg8|Vgg8+Dropout|Vgg8-net2net(no dropout, partially train)|
+|Vgg16|Vgg8|Vgg8+Dropout|Vgg8-net2net(no dropout, wait to fix conv-fc inherit bug)|
 |--|--|---|---|
-|10.00%|83.56%|90.05%|85.45%|
+|10.00%|83.56%|90.05%|87.45%|
 
-![](./demo/vgg_net2net.png)
-**Figure 1** Vgg8-net2net(no dropout, partially train)
+![](./demo/all.png)
+**Figure 1** Vgg8-net2net(no dropout, overall img)
+
+![](./demo/large.png)
+**Figure 2** Vgg8-net2net(no dropout, irredundant img without teacher training accuracy)
 
 - Use kd loss
   - [x] Train(65770): hard label + transfer label; Test(10000): cifar-10 hard label 
