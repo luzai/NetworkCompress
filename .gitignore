@@ -7,6 +7,7 @@
 *.model
 *.png
 !demo/*.png
+!doc/*.png
 *.log*
 *.json
 *.pdf

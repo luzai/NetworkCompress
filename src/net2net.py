@@ -174,7 +174,7 @@ def load_data(dbg=False):
 
 
 # knowledge transfer algorithms
-def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
+def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init,help=None):
     '''Get initial weights for a wider conv2d layer with a bigger nb_filter,
     by 'random-pad' or 'net2wider'.
 
@@ -191,21 +191,34 @@ def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
     '''
     # with open("debug.pkl", "w") as f:
     #     cPickle.dump([teacher_w1, teacher_b1, teacher_w2, new_width], f)
-    if teacher_w2 is None:
+    if len(teacher_w1.shape)==4 and len(teacher_w2.shape)==2 and help is not None:
         n = new_width - teacher_w1.shape[0]
         index = np.random.randint(teacher_w1.shape[0], size=n)
-        factors = np.bincount(index)[index] + 1.
-        new_w1 = teacher_w1[index, :, :, :] / factors.reshape((-1, 1, 1, 1))
+        factors = np.bincount(index)[index] + 1
+        new_w1 = teacher_w1[index, ...]
         noise = np.random.normal(0, 5e-2 * new_w1.std(), size=new_w1.shape)
-        student_w1 = np.concatenate((teacher_w1, new_w1 + noise), axis=0)
-        student_w1[index, :, :, :] = new_w1
-
-        new_b1 = teacher_b1[index] / factors
+        new_w_conv1 = np.concatenate([teacher_w1, new_w1 + noise], axis=0)
+        new_b1 = teacher_b1[index]
         noise = np.random.normal(0, 5e-2 * new_b1.std(), size=new_b1.shape)
-        student_b1 = np.concatenate((teacher_b1, new_b1 + noise), axis=0)
-        student_b1[index] = new_b1
+        new_b_conv1 = np.concatenate([teacher_b1, new_b1 + noise], axis=0)
 
-        return student_w1, student_b1
+        index_fc = np.empty(shape=[0, ], dtype=int)
+        factor_fc = np.empty(shape=[0, ], dtype=int)
+        for i, j in zip(index.reshape((-1,)), factors.reshape((-1,))):
+            start = i * help
+            end = (i + 1) * help
+            #     print index_fc.shape,np.arange(start,end).shape
+            index_fc = np.concatenate([index_fc, np.arange(start, end)])
+
+            factor_fc = np.concatenate([factor_fc,
+                                        j * np.ones(shape=(help,))])
+
+        new_w2 = teacher_w2[index_fc, :] / factor_fc.reshape((-1, 1))
+        noise = np.random.normal(0, 5e-2 * new_w2.std(), size=new_w2.shape)
+        new_w_fc1 = np.concatenate([teacher_w2, new_w2 + noise], axis=0)
+        new_w_fc1[index_fc, :] = new_w2
+
+        return new_w_conv1,new_b_conv1,new_w_fc1
     else:
         assert teacher_w1.shape[0] == teacher_w2.shape[1], (
             'successive layers from teacher model should have compatible shapes')
@@ -599,21 +612,27 @@ def make_wider_student_model(teacher_model,
     # layer_name.discard(new_conv1_name)
     # layer_name.discard(new_fc1_name)
     copy_weights(teacher_model, model, layer_name)
+
     if new_type == "conv":
         next_new_name = new_type + str(new_ind + 1)
-        if next_new_name in [l.name for l in model.layers]:
+        if next_new_name not in [l.name for l in model.layers]:
+            next_new_name="fc1"
+            w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
+            w_conv2, b_conv2 = teacher_model.get_layer(next_new_name).get_weights()
+            from operator import mul
+            print(reduce(mul,model.get_layer("pool2").get_output_shape_at(0)[-2:],1))
+            new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
+                w_conv1, b_conv1, w_conv2, new_conv1_width, init ,reduce(mul,model.get_layer("pool2").get_output_shape_at(0)[-2:],1))
+            # TODO consider pool dropout
+        else:
             w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
             w_conv2, b_conv2 = teacher_model.get_layer(next_new_name).get_weights()
             new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
                 w_conv1, b_conv1, w_conv2, new_conv1_width, init)
-            model.get_layer(new_name).set_weights([new_w_conv1, new_b_conv1])
-            model.get_layer(next_new_name).set_weights([new_w_conv2, b_conv2])
-        else:
-            w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
-            new_w_conv1, new_b_conv1 = wider_conv2d_weight(
-                w_conv1, b_conv1, None, new_conv1_width, init
-            )
-            model.get_layer(new_name).set_weights([new_w_conv1, new_b_conv1])
+
+        model.get_layer(new_name).set_weights([new_w_conv1, new_b_conv1])
+        model.get_layer(next_new_name).set_weights([new_w_conv2, b_conv2])
+
     elif new_type == "fc":
         next_new_name = new_type + str(new_ind + 1)
         w_fc1, b_fc1 = teacher_model.get_layer(new_name).get_weights()

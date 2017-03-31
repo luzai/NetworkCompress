@@ -21,10 +21,10 @@ Contributor: @luzai, @miibotree
 |--|--|---|---|
 |10.00%|83.56%|90.05%|87.45%|
 
-![](./demo/all.png)
+![](./doc/all.png)
 **Figure 1** Vgg8-net2net(no dropout, overall img)
 
-![](./demo/large.png)
+![](./doc/large.png)
 **Figure 2** Vgg8-net2net(no dropout, irredundant img without teacher training accuracy)
 
 - Use kd loss
