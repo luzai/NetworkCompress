@@ -21,11 +21,14 @@ Contributor: @luzai, @miibotree
 |--|--|---|---|
 |10.00%|83.56%|90.05%|87.45%|
 
-![](./doc/all.png)
-**Figure 1** Vgg8-net2net(no dropout, overall img)
+![](./doc/0_250.png)
+**Figure 1** Vgg8-net2net(no dropout, epoch 0-250)
 
-![](./doc/large.png)
-**Figure 2** Vgg8-net2net(no dropout, irredundant img without teacher training accuracy)
+![](./doc/20_250.png)
+**Figure 2** Vgg8-net2net(no dropout, epoch 20-250)
+
+![](./doc/cmd1.png)
+**Figure 3** Vgg-net2net(cmd1, in different stage)
 
 - Use kd loss
   - [x] Train(65770): hard label + transfer label; Test(10000): cifar-10 hard label 

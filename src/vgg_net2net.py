@@ -151,13 +151,19 @@ if __name__ == "__main__":
 
     ]
     commands += [command]
+    print(commands)
     for command in commands:
         print(len(command)-1)
-    exit(-1)
+    # exit(-1)
+    sav=[log0]
     for command in commands:
         print (command)
         student_model, log1 = make_model(teacher_model, command,
                                          train_data, validation_data)
         print(get_width(student_model))
         vis(log0,[log1],command)
-
+        sav.append(log1)
+        sav.append([])
+    with open("sav.pkl","w") as f:
+        cPickle.dump(sav,f)
+    print(sav)

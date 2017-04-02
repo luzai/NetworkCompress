@@ -17,9 +17,9 @@ from load_transfer_data import get_transfer_data
 input_shape = (3, 32, 32)  # image shape
 nb_class = 10  # number of class
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-7)
-early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=3)
+early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5)
 csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
-batch_size = 128
+batch_size = 256
 
 
 # load and pre-process data

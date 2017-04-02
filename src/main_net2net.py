@@ -53,10 +53,10 @@ if __name__ == "__main__":
     '''train net2net student model'''
     command = [
         "net2net",  # model name
-        # ["net2wider", "conv1", 2, 0, args.gl_verbose],  # command name, new layer, new width, number of epoch
-        ["net2wider", "conv2", 2, 0, args.gl_verbose],  # command name, new layer, new width, number of epoch
-        # ["net2wider", "fc1", 2, 0, args.gl_verbose],
-        # ["net2deeper", "conv2", 0, args.gl_verbose],
+        # ["net2wider", "conv1", 2, args.nb_epoch, args.gl_verbose],  # command name, new layer, new width, number of epoch
+        ["net2wider", "conv2", 2, args.nb_epoch, args.gl_verbose],  # command name, new layer, new width, number of epoch
+        # ["net2wider", "fc1", 2, args.nb_epoch, args.gl_verbose],
+        # ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],
         # ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose]
     ]
     student_model, log1 = make_model(teacher_model, command,
