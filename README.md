@@ -14,10 +14,10 @@ Contributor: @luzai, @miibotree
 
 - Grow Architecture to VGG-like
     - [x] Exp: what accuracy can vgg-19 achieve
-    - [ ] amend slight downgrade of net2wider conv8
-    - compare on accuracy and training time
+    - [x] Fixed: slight downgrade of net2wider conv8
+    - [ ] compare on accuracy and training time
     
-|Vgg16|Vgg8|Vgg8+Dropout|Vgg8-net2net(no dropout, wait to fix conv-fc inherit bug)|
+|Vgg16|Vgg8|Vgg8+Dropout|Vgg8-net2net(no dropout)|
 |--|--|---|---|
 |10.00%|83.56%|90.05%|87.45%|
 
@@ -34,12 +34,12 @@ Contributor: @luzai, @miibotree
   - [x] Train(65770): hard label + transfer label; Test(10000): cifar-10 hard label 
   - [ ] [wait] use `functional API` rather than `sequence`
   - hard label + soft-target (tune hyper-parameter T)
-- experiments on  comparing two type models:
-  - Deeper(Different orders) -> Wider
+- experiments on  comparing two type models: Final Accuracies are similar.
+  - Deeper(Different orders) -> Wider: Accuracy grows stable; Train fast
   - Wider -> Deeper
 
 - write `net2branch` function, imitating inception module
-- net2deeper for pooling layer
+- net2deeper for pooling and dropout layer
 - net2wider for conv layer on kernel size dimension, i.e., 3X3 to 5X5
 
 ## Finish list:
@@ -48,6 +48,6 @@ Contributor: @luzai, @miibotree
 - [x] generate soft-taget
 - experiments on random generate model
   - [x] generate random feasible command 
-  - [x] check the completeness, run code parallel
+  - [x] check the completeness, run code in parallel
   - [x] find some rules: Gradient explosion happens when fc is too deep
 - [x] Data-augmentation is better than Dropout.
