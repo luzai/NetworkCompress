@@ -5,7 +5,7 @@ import matplotlib, sys, os, \
     glob, cPickle, scipy, \
     argparse, errno, json, \
     copy, re, time, imp, datetime,\
-    cv2
+    cv2, logging
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -40,23 +40,7 @@ if keras_backend == "theano":
 else:
     _shell_cmd = "cp /home/xlwang/.keras/keras.json.tf /home/xlwang/.keras/keras.json"
     if subprocess.call(_shell_cmd.split()) == 0: print("using keras backend tf")
-    import tensorflow as tf
-    import keras
-    import keras.backend as K
-    sess_config = tf.ConfigProto(
-                allow_soft_placement = True,
-                # log_device_placement = True,
-                # inter_op_parallelism_threads = 8,
-                # intra_op_parallelism_threads = 8
-            )
-    sess_config.gpu_options.allow_growth = True
-    # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
-    sess = tf.Session(config=sess_config)
-    K.set_session(sess)
-import keras
-import keras.backend as K
-K.set_image_data_format("channels_first")
-print K.backend()
+
 # def add_path(path):
 #     if path not in sys.path:
 #         sys.path.insert(0, path)
