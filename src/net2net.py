@@ -152,38 +152,37 @@ def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init,help
 
         return new_w_conv1,new_b_conv1,new_w_fc1
     else:
-        assert teacher_w1.shape[0] == teacher_w2.shape[1], (
+        assert teacher_w1.shape[3] == teacher_w2.shape[2], (
             'successive layers from teacher model should have compatible shapes')
-        assert teacher_w1.shape[0] == teacher_b1.shape[0], (
+        assert teacher_w1.shape[3] == teacher_b1.shape[0], (
             'weight and bias from same layer should have compatible shapes')
-        # new_width=teacher_w1.shape[0]*new_width_ratio
-        assert new_width > teacher_w1.shape[0], (
-            'new width (nb_filter) should be bigger than the existing one')
+        assert new_width > teacher_w1.shape[3], (
+            'new width (filters) should be bigger than the existing one')
 
-        n = new_width - teacher_w1.shape[0]
+        n = new_width - teacher_w1.shape[3]
         if init == 'random-pad':
-            new_w1 = np.random.normal(0, 0.1, size=(n,) + teacher_w1.shape[1:])
+            new_w1 = np.random.normal(0, 0.1, size=teacher_w1.shape[:-1] + (n,))
             new_b1 = np.ones(n) * 0.1
-            new_w2 = np.random.normal(0, 0.1, size=(
-                                                       teacher_w2.shape[0], n) + teacher_w2.shape[2:])
+            new_w2 = np.random.normal(0, 0.1, size=teacher_w2.shape[:2] + (
+                n, teacher_w2.shape[3]))
         elif init == 'net2wider':
-            index = np.random.randint(teacher_w1.shape[0], size=n)
+            index = np.random.randint(teacher_w1.shape[3], size=n)
             factors = np.bincount(index)[index] + 1.
-            new_w1 = teacher_w1[index, :, :, :]
+            new_w1 = teacher_w1[:, :, :, index]
             new_b1 = teacher_b1[index]
-            new_w2 = teacher_w2[:, index, :, :] / factors.reshape((1, -1, 1, 1))
+            new_w2 = teacher_w2[:, :, index, :] / factors.reshape((1, 1, -1, 1))
         else:
             raise ValueError('Unsupported weight initializer: %s' % init)
 
-        student_w1 = np.concatenate((teacher_w1, new_w1), axis=0)
+        student_w1 = np.concatenate((teacher_w1, new_w1), axis=3)
         if init == 'random-pad':
-            student_w2 = np.concatenate((teacher_w2, new_w2), axis=1)
+            student_w2 = np.concatenate((teacher_w2, new_w2), axis=2)
         elif init == 'net2wider':
             # add small noise to break symmetry, so that student model will have
             # full capacity later
             noise = np.random.normal(0, 5e-2 * new_w2.std(), size=new_w2.shape)
-            student_w2 = np.concatenate((teacher_w2, new_w2 + noise), axis=1)
-            student_w2[:, index, :, :] = new_w2
+            student_w2 = np.concatenate((teacher_w2, new_w2 + noise), axis=2)
+            student_w2[:, :, index, :] = new_w2
         student_b1 = np.concatenate((teacher_b1, new_b1), axis=0)
 
         return student_w1, student_b1, student_w2
@@ -209,11 +208,9 @@ def wider_fc_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init):
         'successive layers from teacher model should have compatible shapes')
     assert teacher_w1.shape[1] == teacher_b1.shape[0], (
         'weight and bias from same layer should have compatible shapes')
-    # new_width=teacher_w1.shape[1] * new_width_ratio
     assert new_width > teacher_w1.shape[1], (
         'new width (nout) should be bigger than the existing one')
-    # with open("debug.pkl","w") as f:
-    #     cPickle.dump([teacher_w1, teacher_b1, teacher_w2, new_width],f)
+
     n = new_width - teacher_w1.shape[1]
     if init == 'random-pad':
         new_w1 = np.random.normal(0, 0.1, size=(teacher_w1.shape[0], n))
@@ -249,11 +246,11 @@ def deeper_conv2d_weight(teacher_w):
         teacher_w: `weight` of previous conv2d layer,
           of shape (nb_filter, nb_channel, kh, kw)
     '''
-    nb_filter, nb_channel, kh, kw = teacher_w.shape
-    student_w = np.zeros((nb_filter, nb_filter, kh, kw))
-    for i in xrange(nb_filter):
-        student_w[i, i, (kh - 1) / 2, (kw - 1) / 2] = 1.
-    student_b = np.zeros(nb_filter)
+    kw, kh, num_channel, filters = teacher_w.shape
+    student_w = np.zeros((kw, kh, filters, filters))
+    for i in xrange(filters):
+        student_w[(kw - 1) / 2, (kh - 1) / 2, i, i] = 1.
+    student_b = np.zeros(filters)
     return student_w, student_b
 
 
@@ -433,11 +430,11 @@ def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
         int(new_fc1_width_ratio * (old_fc1_width))
     )
     set_config(student_model_dict, modify_layer_name, "units", new_fc1_width)
-    set_config(student_model_dict, modify_layer_name, "init", "glorot_uniform")
+    # set_config(student_model_dict, modify_layer_name, "init", "glorot_uniform")
     # student_model_dict["config"][modify_layer_ind+1]["config"]["init"] = "glorot_uniform"
-    student_model_dict = to_uniform_init_dict(student_model_dict)
-    # automated!
-    # student_model_dict["config"][modify_layer_ind+1]["config"]["input_dim"]=new_fc1_width
+    # student_model_dict = to_uniform_init_dict(student_model_dict)
+    ## automated!
+    ## student_model_dict["config"][modify_layer_ind+1]["config"]["input_dim"]=new_fc1_width
     # student_model_dict["config"][modify_layer_ind + 1]["config"]["batch_input_shape"]=[None,new_fc1_width]
     return student_model_dict, new_fc1_width, new_fc1_width == FC_WIDTH_LIMITS or old_fc1_width == new_fc1_width
 
@@ -594,8 +591,8 @@ def make_wider_student_model(teacher_model,
     datagen.fit(train_data[0])
     history = model.fit_generator(datagen.flow(train_data[0], train_data[1],
                                                batch_size=batch_size),
-                                  samples_per_epoch=train_data[0].shape[0],
-                                  nb_epoch=nb_epoch,
+                                  steps_per_epoch=train_data[0].shape[0],
+                                  epochs=nb_epoch,
                                   validation_data=validation_data,
                                   verbose=2, callbacks=[lr_reducer, early_stopper, csv_logger])
     # history = model.fit(
@@ -627,7 +624,7 @@ def make_deeper_student_model(teacher_model,
     student_new_layer = copy.deepcopy(student_model_dict["config"][name2ind[new_name]])
     student_new_layer["config"]["name"] = "^_" + new_name
     if new_type == "conv":
-        # student_new_layer["config"]["nb_filter"] # NO NEED
+        # student_new_layer["config"]["filters"] # NO NEED
         pass
     elif new_type == "fc":
         student_new_layer["config"]["init"] = "identity"
