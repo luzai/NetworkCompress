@@ -47,11 +47,16 @@ X_test -= mean_image
 X_train /= 128.
 X_test /= 128.
 
+from net2net import  save_model_config
+
 model = resnet.ResnetBuilder.build_resnet_18((img_channels, img_rows, img_cols), nb_classes)
+save_model_config(model,"resnet")
 model.compile(loss='categorical_crossentropy',
               optimizer='adam',
               metrics=['accuracy'])
 save_model_config(model,"resnet")
+model.summary()
+exit(-1)
 if not data_augmentation:
     print('Not using data augmentation.')
     model.fit(X_train, Y_train,

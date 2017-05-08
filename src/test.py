@@ -1,67 +1,255 @@
-from IPython.display import SVG
-from keras.utils.visualize_util import model_to_dot
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the 'License');
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an 'AS IS' BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""A simple MNIST classifier which displays summaries in TensorBoard.
+ This is an unimpressive MNIST model, but it is a good example of using
+tf.name_scope to make a graph legible in the TensorBoard graph explorer, and of
+naming summary tags so that they are grouped meaningfully in TensorBoard.
+It demonstrates the functionality of every TensorBoard dashboard.
+"""
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
-from net2net import *
-input_shape=(3,16,16)
+import argparse
+import sys
 
-def make_model_for_conv_fc(width,with_activation=False,with_max_pool=False,with_dropout=False):
-    input_node=Input(shape=(input_shape),name="input")
-    x=Convolution2D(width,3,3,name='conv8',border_mode="same"
-                    ,activation='relu'if  with_activation else None
-                    )(input_node)
-    x=MaxPooling2D(name="pool1")(x)  if with_max_pool else x
-    x=Dropout(0.25,name="drop1")(x) if with_dropout else x
-    x=Flatten(name="flatten")(x)
-    output_node=Dense(2048,name='fc1'
-            ,activation='relu'if  with_activation else None
-            )(x)
-    model=Model(input=input_node,output=output_node)
-    model.trainable=False
-    return model
-np.random.seed(1)
-input_inst=np.random.random((1,)+input_shape)
-new_width=128
-model=make_model_for_conv_fc(64)
-model2=make_model_for_conv_fc(new_width)
+import tensorflow as tf
 
-copy_weights(teacher_model=model,student_model=model2)
-copy_weights(student_model=model2,teacher_model=model)
+from tensorflow.examples.tutorials.mnist import input_data
 
-w_conv8, b_conv8 = model.get_layer("conv8").get_weights()
-w_fc1, b_fc1 = model.get_layer("fc1").get_weights()
+FLAGS = None
 
-# new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
-#     w_conv1, b_conv1, w_conv2, 256, "net2wider")
+class Config(object):
+    # Parameters
+    learning_rate = 0.001
+    training_iters = 200000
+    batch_size = 128
+    # batch_size = 1
+    display_step = 10
 
-n= new_width - w_conv8.shape[0]
-index=np.random.randint(w_conv8.shape[0], size=n)
-factors=np.bincount(index)[index]+1
-new_w1=w_conv8[index, ...]
-noise=np.random.normal(0,5e-2*new_w1.std(),size=new_w1.shape)
-new_w_conv1=np.concatenate([w_conv8, new_w1 + noise], axis=0)
-new_b1=b_conv8[index]
-noise=np.random.normal(0,5e-2*new_b1.std(),size=new_b1.shape)
-new_b_conv1=np.concatenate([b_conv8, new_b1 + noise], axis=0)
+    source_dim = 8192
+    hidden1 = 2048
+    hidden2 = 512
+    hidden3 = 128
+    start_learning_rate = 0.001
+    decay_rate = 0.96
+    decay_step = 2000
+    counts = 10000
+    max_epoch = 20
+    # Network Parameters
+    n_input = 784  # MNIST data input (img shape: 28*28)
+    n_classes = 10  # MNIST total classes (0-9 digits)
+    dropout = 0.75  # Dropout, probability to keep units
+    device="/gpu:0"
+    def __init__(self):
+        self.root_dir="/home/xlwang/NetworkCompress/"
+        self.log_dir = self.root_dir+"tmp_tf/log/"
+        self.save_dir = self.root_dir+"tmp_tf/save/"
+        self.data_dir= self.root_dir + "tmp_tf/data/"
+        self.tmp_dit=self.root_dir+"tmp_tf/"
+        self.sess_config = tf.ConfigProto(
+            allow_soft_placement=True,
+            log_device_placement=True,
+            inter_op_parallelism_threads=8,
+            intra_op_parallelism_threads=8
+        )
+        self.sess_config.gpu_options.allow_growth = True
+        # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
+    def check_path(self):
+        if tf.gfile.Exists(config.log_dir):
+            tf.gfile.DeleteRecursively(config.log_dir)
+        tf.gfile.MakeDirs(config.log_dir)
 
-index_fc = np.empty(shape=[0, ], dtype=int)
-factor_fc = np.empty(shape=[0, ], dtype=int)
-for i, j in zip(index.reshape((-1,)), factors.reshape((-1,))):
-    start = i * 256
-    end = (i + 1) * 256
-    #     print index_fc.shape,np.arange(start,end).shape
-    index_fc = np.concatenate([index_fc, np.arange(start, end)])
+        if not tf.gfile.Exists(config.save_dir):
+            tf.gfile.MakeDirs(config.save_dir)
 
-    factor_fc = np.concatenate([factor_fc,
-                                j * np.ones(shape=(256,))])
+        if not tf.gfile.Exists(config.data_dir):
+            tf.gfile.MakeDirs(config.data_dir)
 
-new_w2 = w_fc1[index_fc, :] / factor_fc.reshape((-1, 1))
-noise = np.random.normal(0, 5e-2 * new_w2.std(), size=new_w2.shape)
-new_w_fc1 = np.concatenate([w_fc1, new_w2 + noise], axis=0)
-new_w_fc1[index_fc, :] = new_w2
+config=Config()
 
-model2.get_layer("conv8").set_weights([new_w_conv1, new_b_conv1])
-model2.get_layer("fc1").set_weights([new_w_fc1, b_fc1])
-output_inst = K.function(inputs=[model.input, K.learning_phase()], outputs=[model.output])([input_inst, 0])[0]
+def train():
+    # Import data
+    mnist = input_data.read_data_sets(FLAGS.data_dir,
+                                      one_hot=True,
+                                      fake_data=FLAGS.fake_data)
 
-output_inst2 = K.function(inputs=[model2.input, K.learning_phase()], outputs=[model2.output])([input_inst, 0])[0]
-print output_inst, '\n', output_inst2
+    sess = tf.Session(config=config.sess_config)
+    # sess=tf.InteractiveSession(config=config.sess_config)
+    # Create a multilayer model.
+
+    # Input placeholders
+    with tf.name_scope('input'):
+        with tf.device(config.device):
+            x = tf.placeholder(tf.float32, [None, 784], name='x-input')
+            y_ = tf.placeholder(tf.float32, [None, 10], name='y-input')
+
+    with tf.name_scope('input_reshape'):
+        with tf.device(config.device):
+            image_shaped_input = tf.reshape(x, [-1, 28, 28, 1])
+            tf.summary.image('input', image_shaped_input, 10)
+
+    # We can't initialize these variables to 0 - the network will get stuck.
+    def weight_variable(shape):
+        with tf.device(config.device):
+            """Create a weight variable with appropriate initialization."""
+            initial = tf.truncated_normal(shape, stddev=0.1)
+        return tf.Variable(initial)
+
+    def bias_variable(shape):
+        with tf.device(config.device):
+            """Create a bias variable with appropriate initialization."""
+            initial = tf.constant(0.1, shape=shape)
+        return tf.Variable(initial)
+
+    def variable_summaries(var):
+        """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+        with tf.name_scope('summaries'):
+            mean = tf.reduce_mean(var)
+            tf.summary.scalar('mean', mean)
+            with tf.name_scope('stddev'):
+                stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+            tf.summary.scalar('stddev', stddev)
+            tf.summary.scalar('max', tf.reduce_max(var))
+            tf.summary.scalar('min', tf.reduce_min(var))
+            tf.summary.histogram('histogram', var)
+
+    def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
+        """Reusable code for making a simple neural net layer.
+        It does a matrix multiply, bias add, and then uses relu to nonlinearize.
+        It also sets up name scoping so that the resultant graph is easy to read,
+        and adds a number of summary ops.
+        """
+        # Adding a name scope ensures logical grouping of the layers in the graph.
+        with tf.name_scope(layer_name):
+            # This Variable will hold the state of the weights for the layer
+            with tf.name_scope('weights'):
+                weights = weight_variable([input_dim, output_dim])
+                variable_summaries(weights)
+            with tf.name_scope('biases'):
+                biases = bias_variable([output_dim])
+                variable_summaries(biases)
+            with tf.name_scope('Wx_plus_b'):
+                preactivate = tf.matmul(input_tensor, weights) + biases
+                tf.summary.histogram('pre_activations', preactivate)
+            activations = act(preactivate, name='activation')
+            tf.summary.histogram('activations', activations)
+            return activations
+
+    hidden1 = nn_layer(x, 784, 500, 'layer1')
+
+    with tf.name_scope('dropout'):
+        keep_prob = tf.placeholder(tf.float32)
+        tf.summary.scalar('dropout_keep_probability', keep_prob)
+        dropped = tf.nn.dropout(hidden1, keep_prob)
+
+    # Do not apply softmax activation yet, see below.
+    y = nn_layer(dropped, 500, 10, 'layer2', act=tf.identity)
+
+    with tf.name_scope('cross_entropy'):
+        # The raw formulation of cross-entropy,
+        #
+        # tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.softmax(y)),
+        #                               reduction_indices=[1]))
+        #
+        # can be numerically unstable.
+        #
+        # So here we use tf.nn.softmax_cross_entropy_with_logits on the
+        # raw outputs of the nn_layer above, and then average across
+        # the batch.
+        diff = tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y)
+        with tf.name_scope('total'):
+            cross_entropy = tf.reduce_mean(diff)
+    tf.summary.scalar('cross_entropy', cross_entropy)
+
+    with tf.name_scope('train'):
+        train_step = tf.train.AdamOptimizer(FLAGS.learning_rate).minimize(
+            cross_entropy)
+
+    with tf.name_scope('accuracy'):
+        with tf.name_scope('correct_prediction'):
+            correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+        with tf.name_scope('accuracy'):
+            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    tf.summary.scalar('accuracy', accuracy)
+
+    # Merge all the summaries and write them out to /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
+    merged = tf.summary.merge_all()
+    train_writer = tf.summary.FileWriter(FLAGS.log_dir + '/train', sess.graph)
+    test_writer = tf.summary.FileWriter(FLAGS.log_dir + '/test')
+    sess.run(tf.global_variables_initializer())
+
+    # Train the model, and also write summaries.
+    # Every 10th step, measure test-set accuracy, and write test summaries
+    # All other steps, run train_step on training data, & add training summaries
+
+    def feed_dict(train):
+        """Make a TensorFlow feed_dict: maps data onto Tensor placeholders."""
+        if train or FLAGS.fake_data:
+            xs, ys = mnist.train.next_batch(100, fake_data=FLAGS.fake_data)
+            k = FLAGS.dropout
+        else:
+            xs, ys = mnist.test.images, mnist.test.labels
+            k = 1.0
+        return {x: xs, y_: ys, keep_prob: k}
+
+    for i in range(FLAGS.max_steps):
+        if i % 10 == 0:  # Record summaries and test-set accuracy
+            summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False))
+            test_writer.add_summary(summary, i)
+            print('Accuracy at step %s: %s' % (i, acc))
+        else:  # Record train set summaries, and train
+            if i % 100 == 99:  # Record execution stats
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                summary, _ = sess.run([merged, train_step],
+                                      feed_dict=feed_dict(True),
+                                      options=run_options,
+                                      run_metadata=run_metadata)
+                train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
+                train_writer.add_summary(summary, i)
+                print('Adding run metadata for', i)
+            else:  # Record a summary
+                summary, _ = sess.run([merged, train_step], feed_dict=feed_dict(True))
+                train_writer.add_summary(summary, i)
+    train_writer.close()
+    test_writer.close()
+
+
+def main(_):
+    if tf.gfile.Exists(FLAGS.log_dir):
+        tf.gfile.DeleteRecursively(FLAGS.log_dir)
+    tf.gfile.MakeDirs(FLAGS.log_dir)
+    with tf.device(config.device):
+        train()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--fake_data', nargs='?', const=True, type=bool,
+                        default=False,
+                        help='If true, uses fake data for unit testing.')
+    parser.add_argument('--max_steps', type=int, default=1000,
+                        help='Number of steps to run trainer.')
+    parser.add_argument('--learning_rate', type=float, default=0.001,
+                        help='Initial learning rate')
+    parser.add_argument('--dropout', type=float, default=0.9,
+                        help='Keep probability for training dropout.')
+    parser.add_argument('--data_dir', type=str, default='/home/xlwang/NetworkCompress/tmp_tf/data/',
+                        help='Directory for storing input data')
+    parser.add_argument('--log_dir', type=str, default='/home/xlwang/NetworkCompress/tmp_tf/log/',
+                        help='Summaries log directory')
+    FLAGS, unparsed = parser.parse_known_args()
+    tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)

@@ -130,24 +130,29 @@ if __name__ == "__main__":
     commands += [command]
     command = [
         "vgg_net2net3",  # model name
-        ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],  # conv1
-        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],  # conv1
-        ["net2deeper", "conv3", args.nb_epoch, args.gl_verbose],  # conv1
-        ["net2deeper", "conv4", args.nb_epoch, args.gl_verbose],  # conv1
-        ["net2deeper", "conv5", args.nb_epoch, args.gl_verbose],
-        ["net2deeper", "conv6", args.nb_epoch, args.gl_verbose],
-        ["net2deeper", "conv7", args.nb_epoch, args.gl_verbose],
 
+        ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],  # conv1
         ["net2wider", "conv3", 2, args.nb_epoch, args.gl_verbose],
-        ["net2wider", "conv4", 2, args.nb_epoch, args.gl_verbose],
-        ["net2wider", "conv5", 4, args.nb_epoch, args.gl_verbose],
-        ["net2wider", "conv6", 4, args.nb_epoch, args.gl_verbose],
-        ["net2wider", "conv7", 4, args.nb_epoch, args.gl_verbose],
-        ["net2wider", "conv8", int(256 / 64.), args.nb_epoch, args.gl_verbose],
-        # command name, new layer, new width ratio, number of epoch
 
         ["net2wider", "fc1", int(2048. / 64), args.nb_epoch, args.gl_verbose],
-        ["net2wider", "fc2", int(1024. / 64), args.nb_epoch, args.gl_verbose]
+
+        ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2wider", "fc2", int(1024. / 64), args.nb_epoch, args.gl_verbose],
+
+        ["net2deeper", "conv3", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2wider", "conv4", 2, args.nb_epoch, args.gl_verbose],
+
+        ["net2deeper", "conv4", args.nb_epoch, args.gl_verbose],  # conv1
+        ["net2wider", "conv5", 4, args.nb_epoch, args.gl_verbose],
+
+        ["net2deeper", "conv5", args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv6", 4, args.nb_epoch, args.gl_verbose],
+
+        ["net2deeper", "conv6", args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv7", 4, args.nb_epoch, args.gl_verbose],
+
+        ["net2deeper", "conv7", args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv8", int(256 / 64.), args.nb_epoch, args.gl_verbose]
 
     ]
     commands += [command]

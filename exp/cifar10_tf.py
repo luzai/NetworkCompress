@@ -1,126 +1,171 @@
-'''Train a simple deep CNN on the CIFAR10 small images dataset.
-
-GPU run command with Theano backend (with TensorFlow, the GPU is automatically used):
-    THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python cifar10_cnn.py
-
-It gets down to 0.65 test logloss in 25 epochs, and down to 0.55 after 50 epochs.
-(it's still underfitting at that point, though).
-'''
-
 from __future__ import print_function
+
 import tensorflow as tf
 import os
-os.environ["KERAS_BACKEND"]="tensorflow"
-import sys
-os.system("pwd")
-sys.path.insert(0,"/home/xlwang/NetworkCompress/src")
+import os.path as osp
+import subprocess
+os.getenv("KERAS_BACKEND", "tensorflow")
 
-import keras
-from keras.datasets import cifar10
-from keras.preprocessing.image import ImageDataGenerator
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D, MaxPooling2D
-from keras.utils import np_utils
 
-batch_size = 32
-nb_classes = 10
-nb_epoch = 200
-data_augmentation = True
+class Config(object):
+    # Parameters
+    dbg=True
+    learning_rate = 0.001
+    training_iters = 200000
+    batch_size = 1 if dbg else 128
+    # batch_size = 1
+    display_step = 10
 
-# input image dimensions
-img_rows, img_cols = 32, 32
-# The CIFAR10 images are RGB.
-img_channels = 3
+    source_dim = 8192
+    hidden1 = 2048
+    hidden2 = 512
+    hidden3 = 128
+    start_learning_rate = 0.001
+    decay_rate = 0.96
+    decay_step = 2000
+    counts = 10000
+    max_epoch = 20
+    # Network Parameters
+    n_input = 784  # MNIST data input (img shape: 28*28)
+    n_classes = 10  # MNIST total classes (0-9 digits)
+    dropout = 0.75  # Dropout, probability to keep units
 
-# The data, shuffled and split between train and test sets:
-(X_train, y_train), (X_test, y_test) = cifar10.load_data()
-from net2net import limit_data
-X_train = limit_data(X_train,100)
-y_train=limit_data(y_train,100)
-X_test=limit_data(X_test,100)
-y_test=limit_data(y_test,100)
-
-print('X_train shape:', X_train.shape)
-print(X_train.shape[0], 'train samples')
-print(X_test.shape[0], 'test samples')
-
-# Convert class vectors to binary class matrices.
-Y_train = np_utils.to_categorical(y_train, nb_classes)
-Y_test = np_utils.to_categorical(y_test, nb_classes)
-
-model = Sequential()
-
-model.add(Convolution2D(32, 3, 3, border_mode='same',
-                        input_shape=X_train.shape[1:]))
-model.add(Activation('relu'))
-model.add(Convolution2D(32, 3, 3))
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Dropout(0.25))
-
-model.add(Convolution2D(64, 3, 3, border_mode='same'))
-model.add(Activation('relu'))
-model.add(Convolution2D(64, 3, 3))
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Dropout(0.25))
-
-model.add(Flatten())
-model.add(Dense(512))
-model.add(Activation('relu'))
-model.add(Dropout(0.5))
-model.add(Dense(nb_classes))
-model.add(Activation('softmax'))
-
-# Let's train the model using RMSprop
-model.compile(loss='categorical_crossentropy',
-              optimizer='rmsprop',
-              metrics=['accuracy'])
-
-X_train = X_train.astype('float32')
-X_test = X_test.astype('float32')
-X_train /= 255
-X_test /= 255
-tensorboard = keras.callbacks.TensorBoard(log_dir="_mnist", write_graph=True, write_images=True)
-if not data_augmentation:
-    print('Not using data augmentation.')
-    model.fit(X_train, Y_train,
-              batch_size=batch_size,
-              nb_epoch=nb_epoch,
-              validation_data=(X_test, Y_test),
-              shuffle=True)
-else:
-    sess_config = tf.ConfigProto(
+    def __init__(self):
+        self.root_dir="/home/xlwang/NetworkCompress/"
+        self.log_dir = self.root_dir+"tmp_tf/log/"
+        self.save_dir = self.root_dir+"tmp_tf/save/"
+        self.data_dir= self.root_dir + "tmp_tf/data/"
+        self.tmp_dit=self.root_dir+"tmp_tf/"
+        self.sess_config = tf.ConfigProto(
             allow_soft_placement=True,
             log_device_placement=True,
             inter_op_parallelism_threads=8,
             intra_op_parallelism_threads=8
         )
+        self.sess_config.gpu_options.allow_growth = True
+        # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
+    def check_path(self):
+        if tf.gfile.Exists(config.log_dir):
+            tf.gfile.DeleteRecursively(config.log_dir)
 
-    with tf.Session(config=sess_config) as session:
+            cmd="rm -rf "+config.log_dir
+            subprocess.call(cmd.split())
+            assert not osp.exists(config.log_dir), config.log_dir+" still exits..."
+        tf.gfile.MakeDirs(config.log_dir)
 
-        print('Using real-time data augmentation.')
-        # This will do preprocessing and realtime data augmentation:
-        datagen = ImageDataGenerator(
-            featurewise_center=False,  # set input mean to 0 over the dataset
-            samplewise_center=False,  # set each sample mean to 0
-            featurewise_std_normalization=False,  # divide inputs by std of the dataset
-            samplewise_std_normalization=False,  # divide each input by its std
-            zca_whitening=False,  # apply ZCA whitening
-            rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
-            width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
-            height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
-            horizontal_flip=True,  # randomly flip images
-            vertical_flip=False)  # randomly flip images
+        if not tf.gfile.Exists(config.save_dir):
+            tf.gfile.MakeDirs(config.save_dir)
 
-        # Compute quantities required for featurewise normalization
-        # (std, mean, and principal components if ZCA whitening is applied).
-        datagen.fit(X_train)
+        if not tf.gfile.Exists(config.data_dir):
+            tf.gfile.MakeDirs(config.data_dir)
 
-        # Fit the model on the batches generated by datagen.flow().
-        model.fit_generator(datagen.flow(X_train, Y_train,
-                                         batch_size=batch_size),
-                            samples_per_epoch=X_train.shape[0],
-                            nb_epoch=200,
-                            validation_data=(X_test, Y_test),callbacks=[tensorboard])
+config = Config()
+config.check_path()
+
+def variable_summaries(var, name):
+    with tf.name_scope(name=name):
+        mean = tf.reduce_mean(var)
+        tf.summary.scalar("mean", mean)
+        with tf.name_scope('stddev'):
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        tf.summary.scalar("stddev", stddev)
+        tf.summary.scalar("max", tf.reduce_max(var))
+        tf.summary.scalar("min", tf.reduce_min(var))
+
+
+def conv_layer(input, size_in, size_out, name="conv"):
+    with tf.name_scope(name) as scope:
+        w = tf.Variable(tf.truncated_normal([5, 5, size_in, size_out], stddev=0.1), name="W")
+        b = tf.Variable(tf.constant(0.1, shape=[size_out]), name="B")
+        conv = tf.nn.conv2d(input, w, strides=[1, 1, 1, 1], padding="SAME")
+        act = tf.nn.relu(conv + b)
+        tf.summary.histogram("weights", w)
+        tf.summary.histogram("bias",b)
+        tf.summary.histogram("activation",act)
+        # act_list=tf.split(act,size_out,axis=)
+        print(act.get_shape())
+        # tf.Print(act,[act],message="!!!!!")
+        # tf.Print(act,[act.get_shape()],message="!!!")
+        # tf.Print(act,[tf.shape(act)],message="!!!!")
+
+        x_min = tf.reduce_min(w)
+        x_max = tf.reduce_max(w)
+        weights_0_to_1 = (w - x_min) / (x_max - x_min)
+        weights_0_to_255_uint8 = tf.image.convert_image_dtype(weights_0_to_1, dtype=tf.uint8)
+
+        # to tf.image_summary format [batch_size, height, width, channels]
+        weights_transposed = tf.transpose(weights_0_to_255_uint8, [3, 0, 1, 2])
+        tf.summary.image('activation',weights_transposed)
+        return tf.nn.max_pool(act, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+
+# Add fully connected layer
+def fc_layer(input, size_in, size_out, name="fc"):
+    with tf.name_scope(name)as scope:
+        w = tf.Variable(tf.truncated_normal([size_in, size_out], stddev=0.1), name="W")
+        b = tf.Variable(tf.constant(0.1, shape=[size_out]), name="B")
+        act = tf.nn.relu(tf.matmul(input, w) + b)
+        tf.summary.histogram("weights", w)
+        tf.summary.histogram("bias", b)
+        tf.summary.histogram("activation", act)
+        return act
+
+
+def mnist_model():
+    with tf.device("/cpu:0"):
+        tf.reset_default_graph()
+        sess=tf.Session(config=config.sess_config)
+
+        x = tf.placeholder(tf.float32, shape=[None, 784], name="x")
+        x_image = tf.reshape(x, [-1, 28, 28, 1])
+        tf.summary.image('input', x_image, 3)
+        y = tf.placeholder(tf.float32, shape=[None, 10], name="labels")
+
+        conv1=conv_layer(x_image,1,64,"conv")
+        conv_out = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+
+        flattened = tf.reshape(conv_out, [-1, 7 * 7 * 64])
+
+        logits = fc_layer(flattened, 7 * 7 * 64, 10, "fc")
+
+        with tf.name_scope("xent"):
+            xent = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(
+                    logits=logits, labels=y), name="xent")
+            tf.summary.scalar("xent", xent)
+
+        with tf.name_scope("train"):
+            train_step = tf.train.AdamOptimizer(0.001).minimize(xent)
+
+        with tf.name_scope("accuracy"):
+            correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(y, 1))
+            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+            tf.summary.scalar("accuracy", accuracy)
+
+        summaries = tf.summary.merge_all()
+
+        saver=tf.train.Saver()
+        sess.run(tf.global_variables_initializer())
+        writer=tf.summary.FileWriter(config.log_dir)
+        writer.add_graph(sess.graph)
+
+        for i in range(2001):
+            batch = mnist.train.next_batch(config.batch_size)
+            if i % 1 == 0:
+                [train_accuracy, s] = sess.run([accuracy, summaries], feed_dict={x: batch[0], y: batch[1]})
+                writer.add_summary(s, i)
+
+            if i % 500 == 0:
+            #     sess.run(accuracy, feed_dict={x: mnist.test.images[:1024], y: mnist.test.labels[:1024]})
+                saver.save(sess, config.save_dir+ "mnist",global_step=i)
+            sess.run(train_step, feed_dict={x: batch[0], y: batch[1]})
+
+# Import MNIST data
+from tensorflow.examples.tutorials.mnist import input_data
+mnist = input_data.read_data_sets(config.data_dir, one_hot=True)
+
+def main():
+
+    mnist_model()
+
+if __name__=='__main__':
+    main()

@@ -8,7 +8,8 @@ from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, A
     Convolution2D,Embedding
 from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
-from keras.utils import np_utils, visualize_util
+from keras.utils import np_utils,vis_utils
+
 from keras.preprocessing.image import ImageDataGenerator
 from keras import backend as K
 
@@ -103,75 +104,6 @@ def load_data(dbg=False):
     check_data_format(train_data, test_data)
 
     return train_data, test_data
-
-
-def load_data(dbg=False):
-    transfer_x, transfer_y = get_transfer_data(osp.join(root_dir, "data", "transfer_data"))
-    transfer_y = transfer_y.reshape((-1, 1))
-    (train_x, train_y), (test_x, test_y) = cifar10.load_data()
-    train_x = np.concatenate((train_x, transfer_x))
-    train_y = np.concatenate((train_y, transfer_y))
-    # test_x = np.concatenate((test_x, transfer_x[:transfer_x.shape[0] * 7 / 10, ...]))
-    # test_y = np.concatenate((test_y, transfer_y[:transfer_y.shape[0] * 7 / 10, ...]))
-
-    '''Train and Test use the same mean img'''
-    train_x, mean_image = preprocess_input(train_x, None)
-    test_x, _ = preprocess_input(test_x, mean_image)
-
-    train_y, test_y = map(preprocess_output, [train_y, test_y])
-
-    train_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_transfer.npy")))
-    test_logits = np.asarray(np.load(osp.join(root_dir, "data", "resnet18_logits_test.npy")))
-    print('train_logits.shape: ', train_logits.shape)
-    print('test_logits.shape: ', test_logits.shape)
-    if not isinstance(dbg, bool):
-        train_x, train_y, \
-        test_x, test_y, \
-        train_logits, test_logits \
-            = map(lambda x: limit_data(x, division=dbg), [train_x, train_y,
-                                                          test_x, test_y,
-                                                          train_logits, test_logits]
-                  )
-    elif dbg == True:
-        train_x, train_y, \
-        test_x, test_y, \
-        train_logits, test_logits \
-            = map(lambda x: limit_data(x, division=9999), [train_x, train_y,
-                                                           test_x, test_y,
-                                                           train_logits, test_logits]
-                  )
-    else:
-        '''For speedup'''
-        train_x, train_y, \
-        test_x, test_y, \
-        train_logits, test_logits \
-            = map(lambda x: limit_data(x, division=1), [train_x, train_y,
-                                                        test_x, test_y,
-                                                        train_logits, test_logits]
-                  )
-    # train_data = (train_x, [train_logits, train_y])
-    # test_data = (test_x, [test_logits, test_y])
-    print("\n\n---------------------------------------\n\n")
-
-    train_data = (train_x, train_y)
-    test_data = (test_x, test_y)
-    check_data_format(train_data, test_data)
-
-    return train_data, test_data
-
-
-## Deprecated
-# class AccHist(keras.callbacks.Callback):
-#     def on_train_begin(self, logs={}):
-#         self.accs = []
-#
-#     def on_batch_end(self, batch, logs={}):
-#         # pass
-#         if args.per_iter:
-#             self.accs.append(logs.get('acc'))
-#         else:
-#             self.accs = []
-
 
 # knowledge transfer algorithms
 def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init,help=None):
@@ -348,11 +280,11 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
     '''Train a simple CNN as teacher model.
     '''
     model = Sequential()
-    model.add(Conv2D(64, 3, 3, input_shape=input_shape,
-                     border_mode='same', name='conv1', activation="relu"))
+    model.add(Conv2D(64,(3, 3), input_shape=input_shape,
+                     padding='same', name='conv1', activation="relu"))
     model.add(MaxPooling2D(name='pool1'))
     # model.add(Dropout(0.25,name='conv_drop1'))
-    model.add(Conv2D(64, 3, 3, border_mode='same', name='conv2', activation="relu"))
+    model.add(Conv2D(64, (3,3), padding='same', name='conv2', activation="relu"))
     model.add(MaxPooling2D(name='pool2'))
     # model.add(Dropout(0.25,name='conv_drop2'))
     model.add(Flatten(name='flatten'))
@@ -381,8 +313,8 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
     datagen.fit(train_data[0])
     history = model.fit_generator(datagen.flow(train_data[0], train_data[1],
                                                batch_size=batch_size),
-                                  samples_per_epoch=train_data[0].shape[0],
-                                  nb_epoch=nb_epoch,
+                                  steps_per_epoch=train_data[0].shape[0],
+                                  epochs=nb_epoch,
                                   validation_data=validation_data,
                                   verbose=2, callbacks=[lr_reducer, early_stopper, csv_logger])
     # history = model.fit(
@@ -419,10 +351,10 @@ def get_width(model):
     student_fc_width = []
     for i, v in enumerate(ind2name):
 
-        if mdict["config"][i]["class_name"] == "Convolution2D":
-            student_conv_width += [get_config(mdict, i, "nb_filter")]
+        if mdict["config"][i]["class_name"] == "Conv2D":
+            student_conv_width += [get_config(mdict, i, "filters")]
         elif mdict["config"][i]["class_name"] == "Dense":
-            student_fc_width += [get_config(mdict, i, "output_dim")]
+            student_fc_width += [get_config(mdict, i, "units")]
     return student_conv_width, student_fc_width
 
 
@@ -460,7 +392,7 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
     # student_model_dict=teacher_model_dict
 
     CONV_WIDTH_LIMITS = 512
-    old_conv1_width = get_config(student_model_dict, modify_layer_name, "nb_filter")
+    old_conv1_width = get_config(student_model_dict, modify_layer_name, "filters")
     new_conv1_width = min(
         CONV_WIDTH_LIMITS,
         int(
@@ -468,7 +400,7 @@ def wider_conv2d_dict(new_conv1_width_ratio, modify_layer_name, teacher_model_di
             * old_conv1_width
         )
     )
-    set_config(student_model_dict, modify_layer_name, "nb_filter", new_conv1_width)
+    set_config(student_model_dict, modify_layer_name, "filters", new_conv1_width)
     # No need:
     # student_model_dict["config"][modify_layer_ind+1]["config"]["batch_input_shape"][1]=new_conv1_width
     return student_model_dict, new_conv1_width, new_conv1_width == CONV_WIDTH_LIMITS or new_conv1_width == old_conv1_width
@@ -495,12 +427,12 @@ def wider_fc_dict(new_fc1_width_ratio, modify_layer_name, teacher_model_dict):
     student_model_dict = copy.deepcopy(teacher_model_dict)
     # student_model_dict=teacher_model_dict
     FC_WIDTH_LIMITS = 4096
-    old_fc1_width = get_config(student_model_dict, modify_layer_name, "output_dim")
+    old_fc1_width = get_config(student_model_dict, modify_layer_name, "units")
     new_fc1_width = min(
         FC_WIDTH_LIMITS,
         int(new_fc1_width_ratio * (old_fc1_width))
     )
-    set_config(student_model_dict, modify_layer_name, "output_dim", new_fc1_width)
+    set_config(student_model_dict, modify_layer_name, "units", new_fc1_width)
     set_config(student_model_dict, modify_layer_name, "init", "glorot_uniform")
     # student_model_dict["config"][modify_layer_ind+1]["config"]["init"] = "glorot_uniform"
     student_model_dict = to_uniform_init_dict(student_model_dict)
@@ -772,7 +704,7 @@ def make_model(teacher_model, commands, train_data, validation_data):
         os.system("nvidia-smi")
         print("Attention: ", cmd)
         print(get_width(student_model))
-        # visualize_util.plot(student_model, to_file=str(int(time.time())) + '.pdf', show_shapes=True)
+        # vis_utils.plot_model(student_model, to_file=str(int(time.time())) + '.pdf', show_shapes=True)
         if cmd[0] == "net2wider" or cmd[0] == "random-pad":
             student_model, history = make_wider_student_model(
                 student_model,
@@ -816,7 +748,7 @@ def make_model(teacher_model, commands, train_data, validation_data):
         for log_item in log:
             f.write(str(log_item[0]) + "\n")
             [f.write("\t" + str(log_item_item) + "\n") for log_item_item in log_item[1:]]
-    visualize_util.plot(teacher_model, to_file="teacher.png", show_shapes=True)
+    vis_utils.plot_model(teacher_model, to_file="teacher.png", show_shapes=True)
 
     os.chdir("../../src")
 
@@ -834,7 +766,7 @@ def save_model_config(student_model, name):
             f,
             indent=2
         )
-    visualize_util.plot(student_model, to_file=name + '.pdf', show_shapes=True)
+    vis_utils.plot_model(student_model, to_file=name + '.pdf', show_shapes=True)
     os.chdir("../../src")
 
 
