@@ -1,6 +1,11 @@
 # !/usr/bin/env python
+from __future__ import division
 from __future__ import print_function
 from init import *
+
+from mLog import logger
+from mModel import MyModel
+
 import keras
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
@@ -10,11 +15,14 @@ from keras.optimizers import SGD
 from keras.utils import np_utils, vis_utils
 from keras.preprocessing.image import ImageDataGenerator
 from keras import backend as K
+
 import tensorflow as tf
+import scipy,scipy.ndimage
+import numpy as np
+
 from load_transfer_data import get_transfer_data
 
-logging.basicConfig(filename='output/net2net.log',level=logging.DEBUG)
-logger = logging.getLogger('net2net')
+
 
 class Config(object):
     sess_config = tf.ConfigProto(
@@ -67,91 +75,90 @@ class Config(object):
         return res
 
 
-class MyModel(object):
-    def __init__(self, config=None,model_l=[]):
-        self.config=config
-        self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5,
-                                            min_lr=0.5e-7)
-        self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5)
-        self.csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
-        self.model = None
-        self.model_l = model_l
-        self.names2ind = []
-        self.build(model_l=self.model_l)
-
-
-    def build(self,model_l=[]):
-        self.model_l=model_l
-        input=Input(shape=self.config.input_shape)
-        x=input
-        for layer_config in self.model_l:
-            type=layer_config[0]
-            if type=="Conv2D":
-                x=Conv2D(layer_config[1],layer_config[2],name=layer_config[-1])(x)
-            elif type=="GlobalMaxPooling2D":
-                x=keras.layers.GlobalMaxPooling2D()(x)
-            elif type=="Activation":
-                x=Activation(layer_config[1])(x)
-        self.model = Model(inputs=input, outputs=x)
-        self.names2ind={layer.name:ind for ind,layer in enumerate(self.model.layers)}
-
-    def get_layer(self,name,next_layer=False):
-
-        if next_layer:
-            ind=self.names2ind[name]+1
-        else:
-            ind=self.names2ind[name]
-        return self.model.layers[ind]
-
-    def compile(self):
-        self.model.compile(optimizer='rmsprop',
-                           loss='categorical_crossentropy',
-                           metrics=['accuracy'])
-    def fit(self):
-        self.model.fit(self.config.dataset['train_x'],
-                       self.config.dataset['train_y'],
-                       # validation_split=0.2,
-                       validation_data=(self.config.dataset['test_x'],self.config.dataset['test_y']),
-                       batch_size=self.config.batch_size,
-                       epochs=self.config.epochs,
-                       callbacks=[self.lr_reducer,self.early_stopper,self.csv_logger])
-
-    def evaluate(self):
-        score=self.model.evaluate(self.config.dataset['test_x'],
-                        self.config.dataset['test_y'],
-                              batch_size=self.config.batch_size)
-        return score
-
-    def comp_fit_eval(self):
-        self.compile()
-        self.fit()
-        score = self.evaluate()
-        print('\n-- score --\n')
-        print(score)
-
 class Net2Net(object):
 
-    def wider_conv2d(self,model, name, width_ratio):
-        new_model_l=copy.deepcopy(model.model_l)
+    @staticmethod
+    def _reorder_list(model_l):
+        len_of_list = len(model_l)
+        names=[layer[-1] for layer in model_l]
+        name2ind={name:ind for ind,name in enumerate(names)}
+
+        for ind,layer in enumerate(model_l):
+            if layer[-1]=='new':
+                break
+        new_layer_ind=ind
+        type=layer[0]
+        start_ind = 1
+        for ind, layer in enumerate(model_l):
+            now_type = layer[0]
+            if now_type == type:
+                layer[-1] = type + str(start_ind)
+                start_ind += 1
+        return model_l,model_l[new_layer_ind][-1]
+
+    def wider_conv2d(self, model, name, width_ratio):
+        new_model_l = copy.deepcopy(model.model_l)
         for layer in new_model_l:
-            if layer[-1]==name:
+            if layer[-1] == name:
                 new_width = layer[1] * width_ratio
-                layer[1]=new_width
+                layer[1] = new_width
+        assert new_width in locals()
+        debug = logger.debug(new_model_l)
+        new_model = MyModel(model.config, new_model_l)
 
-        logger.debug(new_model_l)
-        new_model=MyModel(model.config,new_model_l)
-
-        w_conv1, b_conv1=model.get_layer(name).get_weights()
-        w_conv2, b_conv2 = model.get_layer(name,next_layer=True).get_weights()
+        w_conv1, b_conv1 = model.get_layer(name).get_weights()
+        w_conv2, b_conv2 = model.get_layer(name, next_layer=True).get_weights()
 
         new_w_conv1, new_b_conv1, new_w_conv2 = self._wider_conv2d_weight(
             w_conv1, b_conv1, w_conv2, new_width, "net2wider")
 
         new_model.get_layer(name).set_weights([new_w_conv1, new_b_conv1])
-        new_model.get_layer(name,next_layer=True).set_weights([new_w_conv2, b_conv2])
+        new_model.get_layer(name, next_layer=True).set_weights([new_w_conv2, b_conv2])
 
         return new_model
 
+    def deeper_conv2d(self, model, name, kernel_size=3,filters='same'):
+        new_model_l = copy.deepcopy(model.model_l)
+        for ind,layer in enumerate(new_model_l):
+            if layer[-1] == name:
+                new_layer=copy.deepcopy(layer)
+                new_layer[1] = layer[1] if filters=='same' else filters
+                new_layer[2] = kernel_size
+                new_layer[-1] = 'new'
+                break
+        assert new_layer in locals() and ind in locals()
+        new_model_l.insert(ind, new_layer)
+        new_model_l,new_layer_name = self._reorder_list(new_model_l)
+
+        logger.debug(new_model_l)
+
+        new_model=MyModel(model.config,new_model_l)
+
+        w_conv1, b_conv1 = model.get_layer(name,last_layer=True).get_weights()
+        w_conv2, b_conv2 = model.get_layer(name).get_weights()
+
+        new_w_conv2, new_b_conv2 = self._deeper_conv2d_weight(
+            w_conv1, b_conv1, w_conv2,b_conv2,"net2deeper")
+
+        model.get_layer(name).set_weights([new_w_conv2,new_b_conv2])
+
+    @staticmethod
+    def _deeper_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, teacher_b2, init='net2deeper'):
+        student_w,student_b \
+            =map(Net2Net._common_conv2d_weight,
+            (teacher_w1,teacher_w2.shape),
+            (teacher_b1,teacher_b2.shape))
+        return  student_w,student_b
+
+    @staticmethod
+    def _common_conv2d_weight(w,b,nw_size,nb_size):
+        def convert_weight(w,nw_size):
+            w_size=w.shape
+            assert  len(w_size)==len(nw_size)
+            w_ratio=[nw/w for nw,w in zip(nw_size,w_size)]
+            nw=scipy.ndimage.zoom(w,w_ratio)
+            return  nw
+        return convert_weight(w,nw_size),convert_weight(b,nb_size)
 
 
     @staticmethod
@@ -191,6 +198,7 @@ class Net2Net(object):
 
         return student_w1, student_b1, student_w2
 
+
 if __name__ == "__main__":
 
     dbg = False
@@ -198,16 +206,18 @@ if __name__ == "__main__":
         config = Config(epochs=0, verbose=1, limit_data=9999)
     else:
         config = Config(epochs=100, verbose=1, limit_data=1)
-    teacher_model = MyModel(config, [["Conv2D", 64, 3, 'conv1'],
-                                     ["Conv2D",64,3,'conv2'],
-                                     ["Conv2D",10,3,'conv3'],
-                                     ['GlobalMaxPooling2D'],
-                                     ['Activation','softmax']])
+    teacher_model = MyModel(config, [["Conv2D", 'conv1',{'filters':64}],
+                                     ["Conv2D", 'conv2',{'filters':64}],
+                                     ["Conv2D",  'conv3',{'filters':10}],
+                                     ['GlobalMaxPooling2D','gmpool1',{}],
+                                     ['Activation', 'activation1',{'activation_type':'softmax'}]])
+
     teacher_model.comp_fit_eval()
 
-    net2net=Net2Net()
+    net2net = Net2Net()
 
-    student_model=net2net.wider_conv2d(teacher_model, name='conv2', width_ratio=2)
+    # student_model=net2net.wider_conv2d(teacher_model, name='conv2', width_ratio=2)
+    student_mode = net2net.deeper_conv2d(teacher_model, name='conv2')
     student_model.comp_fit_eval()
     # from IPython import embed; embed()
 

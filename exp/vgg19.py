@@ -11,7 +11,7 @@ from __future__ import print_function
 import sys
 sys.path.insert(0,"../src")
 
-from net2net import *
+from Net2Net import *
 import numpy as np
 import warnings
 from keras.models import Model

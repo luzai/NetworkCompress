@@ -1,7 +1,7 @@
 from __future__ import print_function
 import numpy as np
 np.random.seed(1337)  # for reproducibility
-from net2net import  *
+from Net2Net import  *
 from keras.datasets import cifar10
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense, Dropout, Activation, Flatten

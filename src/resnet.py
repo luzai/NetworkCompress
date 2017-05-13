@@ -253,5 +253,5 @@ class ResnetBuilder(object):
 
 if __name__=="__main__":
     model=ResnetBuilder.build_resnet_18([28,28,3],10)
-    from net2net import save_model_config
+    from Net2Net import save_model_config
     save_model_config(model,name="resnet")

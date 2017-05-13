@@ -14,7 +14,7 @@ from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping, ModelCh
 import numpy as np
 
 import resnet
-from net2net import *
+from Net2Net import *
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
 early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
 csv_logger = CSVLogger('../output/resnet18_cifar10.csv')
@@ -47,7 +47,7 @@ X_test -= mean_image
 X_train /= 128.
 X_test /= 128.
 
-from net2net import  save_model_config
+from Net2Net import  save_model_config
 
 model = resnet.ResnetBuilder.build_resnet_18((img_channels, img_rows, img_cols), nb_classes)
 save_model_config(model,"resnet")

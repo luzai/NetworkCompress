@@ -9,7 +9,7 @@ It gets down to 0.65 test logloss in 25 epochs, and down to 0.55 after 50 epochs
 import sys
 sys.path.insert(0,"../src")
 
-from net2net import *
+from Net2Net import *
 
 from keras.datasets import cifar10
 from keras.preprocessing.image import ImageDataGenerator

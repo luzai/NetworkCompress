@@ -1,4 +1,4 @@
-from net2net import *
+from Net2Net import *
 
 saves = []
 save = []

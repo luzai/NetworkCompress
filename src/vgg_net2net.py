@@ -1,5 +1,5 @@
 from __future__ import print_function
-from net2net import *
+from Net2Net import *
 
 
 def parse_args():
