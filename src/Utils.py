@@ -24,6 +24,7 @@ import numpy as np
 # TODO tf function like summary in callback, grap_def to dot, get output_tensor
 # for python
 # TODO map length name to clean ones
+#SVG(model_to_dot(model2,show_shapes=True).create(prog='dot', format='svg'))
 def vis_model(model, name='net2net'):
     if isinstance(model, MyModel):
         model = model.model

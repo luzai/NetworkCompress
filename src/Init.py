@@ -17,9 +17,9 @@ import scipy.io as sio
 from pprint import pprint
 import subprocess
 
-_shell_cmd = "rm -f __init__.pyc init.pyc load_transfer_data.pyc  net2net.pyc"
-if subprocess.call(_shell_cmd.split()) == 0:
-    print("reload")
+# _shell_cmd = "rm -f __init__.pyc init.pyc load_transfer_data.pyc  net2net.pyc"
+# if subprocess.call(_shell_cmd.split()) == 0:
+#     print("reload")
 
 keras_backend = "tensorflow" #tensorflow
 gpu = True
