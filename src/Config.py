@@ -1,12 +1,33 @@
 from __future__ import division
 from __future__ import print_function
-
+import argparse
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
 from keras.datasets import cifar10
 from keras.utils import np_utils
 
+def parse_args():
+    """Parse input arguments."""
+    parser = argparse.ArgumentParser(description='net work compression')
+    parser.add_argument('--epoch', dest='nb_epoch', help='number epoch',
+                        default=150, type=int)
+    parser.add_argument("--teacher-epoch", dest="nb_teacher_epoch", help="number teacher epoch",
+                        default=50, type=int)
+    parser.add_argument('--verbose', dest='gl_verbose', help="global verbose",
+                        default=1, type=int)
+    parser.add_argument('--cpu', dest='cpu_mode',
+                        help='Use CPU mode (overrides --gpu)',
+                        action='store_true')
+    parser.add_argument("--dbg", dest="dbg",
+                        help="for dbg",
+                        action="store_true")
+    parser.add_argument('--gpu', dest='gpu_id', help='gpu id',
+                        default=0, type=int)
+    _args = parser.parse_args()
+    return _args
+
+args=parse_args()
 
 class Config(object):
     sess_config = tf.ConfigProto(
@@ -60,3 +81,4 @@ class Config(object):
                 self._limit_data(val, limit_data)
             Config.cache_data = res
         return Config.cache_data
+

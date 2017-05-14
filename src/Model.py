@@ -1,5 +1,5 @@
 from Log import logger
-from init import root_dir
+from Init import root_dir
 from Config import  Config
 
 import keras
@@ -29,6 +29,10 @@ class Node(object):
 
     def __str__(self):
         return self.name
+
+class MyGraph(nx.DiGraph):
+    # may be more suitable
+    pass
 
 
 class MyModel(object):
@@ -139,8 +143,8 @@ class MyModel(object):
     #     else:
     #         return node
 
-    def get_layer(self):
-
+    def get_layer(self, name, next_layer=False, last_layer=False):
+        # for functional model
 
     def compile(self):
         self.model.compile(optimizer='rmsprop',

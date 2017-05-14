@@ -10,7 +10,7 @@ from keras import backend as K
 from keras.datasets import cifar10
 from keras.utils import np_utils
 
-from init import root_dir
+from Init import root_dir
 from Log import logger
 from Model import MyModel
 from Config import Config
@@ -20,14 +20,17 @@ class Net2Net(object):
     def get_node(graph,name, next_layer=False, last_layer=False):
         name2node={ node.name :node for  node in  graph.nodes()}
         node=name2node[name]
+        assert len(node)==1, " Name must be uniqiue"
         if next_layer:
             return graph.successors(node)
         elif last_layer:
             return graph.predecessors(node)
         else:
+
             return node
 
     def wider_conv2d(self, model, name, width_ratio):
+        # modify graph
         new_graph=model.graph.copy()
         new_node=Net2Net.get_node(new_graph,name)
         assert new_node.type=='Conv2D','must wide a conv'
@@ -35,9 +38,10 @@ class Net2Net(object):
         new_node.config['filters']=new_width
 
         logger.debug(pprint.pformat(new_graph))
-
+        # construct model
         new_model=MyModel(config=model.config,graph= new_graph)
 
+        # inherit weight
         w_conv1, b_conv1 = model.get_node(name).get_weights()
         w_conv2, b_conv2 = model.get_node(name, next_layer=True).get_weights()
 
