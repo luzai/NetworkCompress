@@ -67,4 +67,14 @@ if with_caffe == True:
         pass
         # os.chdir(run_root)
 
+import keras
+from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
+from keras.datasets import cifar10
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, Embedding
+from keras.models import Sequential, model_from_json, Model
+from keras.optimizers import SGD
+from keras.utils import np_utils, vis_utils
+from keras.preprocessing.image import ImageDataGenerator
+from keras import backend as K
+
 print("\n------------------------------\n")

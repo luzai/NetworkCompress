@@ -228,9 +228,9 @@ def copy_weights(teacher_model, student_model, layer_names):
      for layers with names listed in layer_names
     '''
     for name in layer_names:
-        weights = teacher_model.get_layer(name=name).get_weights()
-        if student_model.get_layer(name=name) is not None:
-            student_model.get_layer(name=name).set_weights(weights)
+        weights = teacher_model.get_node(name=name).get_weights()
+        if student_model.get_node(name=name) is not None:
+            student_model.get_node(name=name).set_weights(weights)
         else:
             names2ind = {layer.name: ind for ind, layer in enumerate(student_model.layers)}
             ind = names2ind[name]
@@ -286,15 +286,15 @@ def make_wider_student_model(teacher_model, train_data,
     # and their immediate downstreams, which will be initialized separately.
     # For this example there are no other layers that need to be copied.
 
-    w_conv1, b_conv1 = teacher_model.get_layer('conv1').get_weights()
-    w_conv2, b_conv2 = teacher_model.get_layer('conv2').get_weights()
+    w_conv1, b_conv1 = teacher_model.get_node('conv1').get_weights()
+    w_conv2, b_conv2 = teacher_model.get_node('conv2').get_weights()
     new_w_conv1, new_b_conv1, new_w_conv2 = wider2net_conv2d(
         w_conv1, b_conv1, w_conv2, new_conv1_width, init)
     model.get_layer('conv1').set_weights([new_w_conv1, new_b_conv1])
     model.get_layer('conv2').set_weights([new_w_conv2, b_conv2])
 
-    w_fc1, b_fc1 = teacher_model.get_layer('fc1').get_weights()
-    w_fc2, b_fc2 = teacher_model.get_layer('fc2').get_weights()
+    w_fc1, b_fc1 = teacher_model.get_node('fc1').get_weights()
+    w_fc2, b_fc2 = teacher_model.get_node('fc2').get_weights()
     new_w_fc1, new_b_fc1, new_w_fc2 = wider2net_fc(
         w_fc1, b_fc1, w_fc2, new_fc1_width, init)
     model.get_layer('fc1').set_weights([new_w_fc1, new_b_fc1])
