@@ -9,7 +9,7 @@ import scipy.ndimage
 import Utils
 from Config import Config
 from Log import logger
-from Model import MyModel, MyGraph,Node
+from Model import MyModel, MyGraph, Node
 
 
 class Net2Net(object):
@@ -18,7 +18,13 @@ class Net2Net(object):
         node1=new_graph.get_nodes(from_name)[0]
         node2=new_graph.get_nodes(to_name)[0]
         node3=new_graph.get_nodes(to_name,next_layer=True)[0]
-        new_node=Node('Concatenate','new',{}) # we use  channel first, will set axis = 1 latter
+        new_graph.update()
+        new_name='Concatenate'+\
+                     str(
+                         1 + max( new_graph.type2ind.get('Concatenate',[0]) )
+                     )
+        new_node=Node(type='Concatenate',name=new_name,config={})  # we use channel first, will set axis = 1 latter
+        new_graph.add_node(new_node)
         new_graph.remove_edge(node2,node3)
         new_graph.add_edge(node1,new_node)
         new_graph.add_edge(node2,new_node)

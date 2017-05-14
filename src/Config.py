@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 from keras.datasets import cifar10
-from keras.utils import np_utils
+import keras.utils
 
 def parse_args():
     """Parse input arguments."""
@@ -27,18 +27,19 @@ def parse_args():
     _args = parser.parse_args()
     return _args
 
-args=parse_args()
+# args=parse_args()
 
 class Config(object):
-    sess_config = tf.ConfigProto(
+    tf_graph=tf.get_default_graph()
+    _sess_config = tf.ConfigProto(
         allow_soft_placement=True,
         # log_device_placement = True,
         # inter_op_parallelism_threads = 8,
         # intra_op_parallelism_threads = 8
     )
-    sess_config.gpu_options.allow_growth = True
+    _sess_config.gpu_options.allow_growth = True
     # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
-    sess = tf.Session(config=sess_config)
+    sess = tf.Session(config=_sess_config, graph=tf_graph)
     K.set_session(sess)
     K.set_image_data_format("channels_first")
 
@@ -62,7 +63,7 @@ class Config(object):
         return x, mean_image
 
     def _preprocess_output(self, y):
-        return np_utils.to_categorical(y, self.nb_class)
+        return keras.utils.np_utils.to_categorical(y, self.nb_class)
 
     @staticmethod
     def _limit_data(x, div):

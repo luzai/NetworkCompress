@@ -7,7 +7,7 @@ import matplotlib, sys, os, \
     copy, re, time, imp, datetime,\
     cv2, logging
 
-matplotlib.use("Agg")
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -61,8 +61,7 @@ if with_caffe == True:
     try:
         caffe = imp.load_source('caffe', '/home/luzai/App/caffe/python')
     except Exception as inst:
-        print(inst.args)
-        print('import caffe fail')
+        print(inst)
     finally:
         pass
         # os.chdir(run_root)

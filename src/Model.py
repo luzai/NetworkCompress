@@ -2,6 +2,7 @@ import keras,json
 import networkx as nx
 import numpy as np
 import os.path as osp
+import tensorflow as tf
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.layers import Conv2D, Input, Activation, GlobalMaxPooling2D
 from keras.models import Model
@@ -34,9 +35,9 @@ class CustomTypeEncoder(json.JSONEncoder):
     one key, '__TypeName__' where 'TypeName' is the actual name of the
     type to which the object belongs.  That single key maps to another
     object literal which is just the __dict__ of the object encoded."""
-    TYPES = {'Node': Node}
+    # TYPES = {'Node': Node}
     def default(self, obj):
-        if isinstance(obj, Node):
+        if isinstance(obj, Node) or isinstance(obj,keras.layers.Layer) :
             key = '__%s__' % obj.__class__.__name__
             return { key: obj.__dict__}
         return json.JSONEncoder.default(self, obj)
@@ -86,7 +87,10 @@ class MyGraph(nx.DiGraph):
         # assign new node
         if new_node.name == 'new':
             self.update()
-            new_name=new_node.type+str(1+max(self.type2ind[new_node.type]))
+            new_name=new_node.type+\
+                     str(
+                         1 + max( self.type2ind.get(new_node.type ,[0]) )
+                     )
             new_node.name =new_name
 
         if new_node.config['filters'] == 'same':
@@ -108,7 +112,7 @@ class MyGraph(nx.DiGraph):
         for node in topo_nodes:
             pre_nodes = graph_helper.predecessors(node)
             suc_nodes = graph_helper.successors(node)
-            # TODO Now single input; future multiple input; use len to judge
+            # TODO Now single input; future multiple input; use len or type to judge
             if node.type not in ['Concatenate','Add']:
                 if len(pre_nodes) == 0:
                     layer_input_tensor = input_tensor
@@ -143,7 +147,7 @@ class MyGraph(nx.DiGraph):
                         for layer_input_tensor in layer_input_tensors
                     ]
 
-                    layer=keras.layers.Concatenate(axis=0)
+                    layer=keras.layers.Concatenate(axis=1)
                 layer_output_tensor = layer(layer_input_tensors)
 
             graph_helper.add_node(node, layer=layer)
@@ -153,15 +157,17 @@ class MyGraph(nx.DiGraph):
             else:
                 for suc_node in suc_nodes:
                     graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
-
+        assert  tf.get_default_graph()==Config.tf_graph,"should be same"
+        tf.train.export_meta_graph('tmp.pbtxt',graph_def=tf.get_default_graph().as_graph_def())
+        assert 'output_tensor' in locals()
         return Model(inputs=input_tensor, outputs=output_tensor)
 
     @staticmethod
     def my_resize(x,new_shape):
         import tensorflow as tf
         # original_shape = ktf.int_shape(x)
-        new_shape = tf.shape(x)[2:]
-        new_shape *= tf.constant(np.array(new_shape).astype('int32'))
+        # new_shape = tf.shape(x)
+        new_shape = tf.constant(np.array(new_shape).astype('int32'))
         x = ktf.permute_dimensions(x, [0, 2, 3, 1])
         x = tf.image.resize_nearest_neighbor(x, new_shape)
         x = ktf.permute_dimensions(x, [0, 3, 1, 2])
@@ -171,7 +177,13 @@ class MyGraph(nx.DiGraph):
 
     def to_json(self):
         data = json_graph.node_link_data(self)
-        return json.dumps(data,indent=2,cls=CustomTypeEncoder)
+        try :
+            str=json.dumps(data, indent=2, cls=CustomTypeEncoder)
+        except Exception as inst:
+            str=""
+            print inst
+
+        return str
 
 
 class MyModel(object):
