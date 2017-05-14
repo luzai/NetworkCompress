@@ -218,7 +218,7 @@ class Legacy(object):
         for name in layer_names:
             weights = teacher_model.get_layer(name=name).get_weights()
             try:
-                student_model.get_node(name=name).set_weights(weights)
+                student_model.get_nodes(name=name).set_weights(weights)
             except ValueError as e:
                 # print("some layer shape change, Don't copy, We Init it Manually! OK!")
                 # print("\t It is OK! Detail: {}".format(e))
@@ -495,10 +495,10 @@ class Legacy(object):
                 w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
                 w_conv2, b_conv2 = teacher_model.get_layer(next_new_name).get_weights()
                 from operator import mul
-                print(reduce(mul, model.get_node("pool2").get_output_shape_at(0)[-2:], 1))
+                print(reduce(mul, model.get_nodes("pool2").get_output_shape_at(0)[-2:], 1))
                 new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
                     w_conv1, b_conv1, w_conv2, new_conv1_width, init,
-                    reduce(mul, model.get_node("pool2").get_output_shape_at(0)[-2:], 1))
+                    reduce(mul, model.get_nodes("pool2").get_output_shape_at(0)[-2:], 1))
                 # TODO consider pool dropout
             else:
                 w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
@@ -506,8 +506,8 @@ class Legacy(object):
                 new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
                     w_conv1, b_conv1, w_conv2, new_conv1_width, init)
 
-            model.get_node(new_name).set_weights([new_w_conv1, new_b_conv1])
-            model.get_node(next_new_name).set_weights([new_w_conv2, b_conv2])
+            model.get_nodes(new_name).set_weights([new_w_conv1, new_b_conv1])
+            model.get_nodes(next_new_name).set_weights([new_w_conv2, b_conv2])
 
         elif new_type == "fc":
             next_new_name = new_type + str(new_ind + 1)
@@ -515,8 +515,8 @@ class Legacy(object):
             w_fc2, b_fc2 = teacher_model.get_layer(next_new_name).get_weights()
             new_w_fc1, new_b_fc1, new_w_fc2 = wider_fc_weight(
                 w_fc1, b_fc1, w_fc2, new_fc1_width, init)
-            model.get_node(new_name).set_weights([new_w_fc1, new_b_fc1])
-            model.get_node(next_new_name).set_weights([new_w_fc2, b_fc2])
+            model.get_nodes(new_name).set_weights([new_w_fc1, new_b_fc1])
+            model.get_nodes(next_new_name).set_weights([new_w_fc2, b_fc2])
 
         model.compile(loss='categorical_crossentropy',
                       optimizer=SGD(lr=0.001, momentum=0.9),
@@ -581,7 +581,7 @@ class Legacy(object):
         if new_type == "conv" and init == 'net2deeper':
             prev_w, _ = teacher_model.get_layer(new_name).get_weights()
             new_weights = deeper_conv2d_weight(prev_w)
-            model.get_node("^_" + new_name).set_weights(new_weights)
+            model.get_nodes("^_" + new_name).set_weights(new_weights)
 
         ## copy weights for other layers
         copy_weights(teacher_model, model)

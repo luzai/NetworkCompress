@@ -3,6 +3,7 @@ import logging,sys
 # logging.basicConfig(filename='output/net2net.log', level=logging.DEBUG)
 
 logger = logging.getLogger('net2net')
+logger.setLevel(logging.INFO)
 
 ch = logging.StreamHandler(sys.stdout)
 ch.setLevel(logging.DEBUG)

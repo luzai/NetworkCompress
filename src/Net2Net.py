@@ -12,71 +12,57 @@ from keras.utils import np_utils
 
 from Init import root_dir
 from Log import logger
-from Model import MyModel
+from Model import MyModel,MyGraph
 from Config import Config
 
 class Net2Net(object):
-    @staticmethod
-    def get_node(graph,name, next_layer=False, last_layer=False):
-        name2node={ node.name :node for  node in  graph.nodes()}
-        node=name2node[name]
-        assert len(node)==1, " Name must be uniqiue"
-        if next_layer:
-            return graph.successors(node)
-        elif last_layer:
-            return graph.predecessors(node)
-        else:
-
-            return node
 
     def wider_conv2d(self, model, name, width_ratio):
         # modify graph
         new_graph=model.graph.copy()
-        new_node=Net2Net.get_node(new_graph,name)
+        new_node=new_graph.get_nodes(name)[0]
         assert new_node.type=='Conv2D','must wide a conv'
         new_width=new_node.config['filters']*width_ratio
         new_node.config['filters']=new_width
 
-        logger.debug(pprint.pformat(new_graph))
+        logger.debug(new_graph.to_json())
         # construct model
         new_model=MyModel(config=model.config,graph= new_graph)
 
         # inherit weight
-        w_conv1, b_conv1 = model.get_node(name).get_weights()
-        w_conv2, b_conv2 = model.get_node(name, next_layer=True).get_weights()
+        w_conv1, b_conv1 = model.get_layers(name)[0].get_weights()
+        w_conv2, b_conv2 = model.get_layers(name, next_layer=True)[0].get_weights()
 
         new_w_conv1, new_b_conv1, new_w_conv2 = self._wider_conv2d_weight(
             w_conv1, b_conv1, w_conv2, new_width, "net2wider")
 
-        new_model.get_node(name).set_weights([new_w_conv1, new_b_conv1])
-        new_model.get_node(name, next_layer=True).set_weights([new_w_conv2, b_conv2])
+        new_model.get_layers(name)[0].set_weights([new_w_conv1, new_b_conv1])
+        new_model.get_layers(name, next_layer=True)[0].set_weights([new_w_conv2, b_conv2])
 
         return new_model
 
     def deeper_conv2d(self, model, name, kernel_size=3, filters='same'):
-        new_model_l = copy.deepcopy(model.model_l)
-        for ind, layer in enumerate(new_model_l):
-            if layer[-1] == name:
-                new_layer = copy.deepcopy(layer)
-                new_layer[1] = layer[1] if filters == 'same' else filters
-                new_layer[2] = kernel_size
-                new_layer[-1] = 'new'
-                break
-        assert new_layer in locals() and ind in locals()
-        new_model_l.insert(ind, new_layer)
-        new_model_l, new_layer_name = self._reorder_list(new_model_l)
+        # construct graph
+        new_graph = model.graph.copy()
+        from Model import Node
 
-        logger.debug(new_model_l)
+        new_node=Node(type='Conv2D',name='new',
+                     config= {'kernel_size':kernel_size,'filters':filters}
+                      )
+        new_graph.deeper(name,new_node)
+        logger.debug(new_graph.to_json())
 
-        new_model = MyModel(model.config, new_model_l)
+        # construc model
+        new_model=MyModel(config=model.config,graph=new_graph)
 
-        w_conv1, b_conv1 = model.get_node(name, last_layer=True).get_weights()
-        w_conv2, b_conv2 = model.get_node(name).get_weights()
+        # inherit weight
+        w_conv1, b_conv1 = model.get_layers(name, last_layer=True).get_weights()
+        w_conv2, b_conv2 = model.get_layers(name).get_weights()
 
         new_w_conv2, new_b_conv2 = self._deeper_conv2d_weight(
             w_conv1, b_conv1, w_conv2, b_conv2, "net2deeper")
 
-        model.get_node(name).set_weights([new_w_conv2, new_b_conv2])
+        new_model.get_layers(name).set_weights([new_w_conv2, new_b_conv2])
 
     @staticmethod
     def _deeper_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, teacher_b2, init='net2deeper'):
@@ -137,22 +123,24 @@ class Net2Net(object):
 
 if __name__ == "__main__":
 
-    dbg = False
+    dbg = True
     if dbg:
         config = Config(epochs=0, verbose=1, limit_data=9999)
     else:
         config = Config(epochs=100, verbose=1, limit_data=1)
-    teacher_model = MyModel(config, [["Conv2D", 'conv1', {'filters': 64}],
-                                     ["Conv2D", 'conv2', {'filters': 64}],
-                                     ["Conv2D", 'conv3', {'filters': 10}],
-                                     ['GlobalMaxPooling2D', 'gmpool1', {}],
-                                     ['Activation', 'activation1', {'activation_type': 'softmax'}]])
+    model_l = [["Conv2D", 'conv1', {'filters': 64}],
+               ["Conv2D", 'conv2', {'filters': 64}],
+               ["Conv2D", 'conv3', {'filters': 10}],
+               ['GlobalMaxPooling2D', 'gmpool1', {}],
+               ['Activation', 'activation1', {'activation_type': 'softmax'}]]
+    graph = MyGraph(model_l)
+    teacher_model = MyModel(config, graph)
 
     teacher_model.comp_fit_eval()
 
     net2net = Net2Net()
 
-    student_model = net2net.wider_conv2d(teacher_model, name='conv2', width_ratio=2)
-    # student_model = net2net.deeper_conv2d(teacher_model, name='conv2')
+    # student_model = net2net.wider_conv2d(teacher_model, name='conv2', width_ratio=2)
+    student_model = net2net.deeper_conv2d(teacher_model, name='conv2')
     student_model.comp_fit_eval()
     # from IPython import embed; embed()

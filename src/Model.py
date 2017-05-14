@@ -1,21 +1,14 @@
-from Log import logger
-from Init import root_dir
-from Config import  Config
-
-import keras
-from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
-from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, Embedding
-from keras.models import Sequential, model_from_json, Model
-from keras.optimizers import SGD
-from keras.utils import np_utils, vis_utils
-from keras.preprocessing.image import ImageDataGenerator
-from keras import backend as K
-
-import os, sys, re
+import keras,json
 import networkx as nx
 import numpy as np
 import os.path as osp
+from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
+from keras.layers import Conv2D, Input, Activation
+from keras.models import Model
+from networkx.readwrite import json_graph
+
+from Config import Config
+from Init import root_dir
 
 
 class Node(object):
@@ -30,9 +23,26 @@ class Node(object):
     def __str__(self):
         return self.name
 
+
+class CustomTypeEncoder(json.JSONEncoder):
+
+    """A custom JSONEncoder class that knows how to encode core custom
+    objects.
+
+    Custom objects are encoded as JSON object literals (ie, dicts) with
+    one key, '__TypeName__' where 'TypeName' is the actual name of the
+    type to which the object belongs.  That single key maps to another
+    object literal which is just the __dict__ of the object encoded."""
+    TYPES = {'Node': Node}
+    def default(self, obj):
+        if isinstance(obj, Node):
+            key = '__%s__' % obj.__class__.__name__
+            return { key: obj.__dict__}
+        return json.JSONEncoder.default(self, obj)
+
 class MyGraph(nx.DiGraph):
-    def __init__(self,model_l=None):
-        super(MyGraph,self).__init__()
+    def __init__(self, model_l=None):
+        super(MyGraph, self).__init__()
         if model_l is not None:
             _nodes = []
             for layer in model_l:
@@ -48,8 +58,39 @@ class MyGraph(nx.DiGraph):
 
             self.add_path(_nodes)
 
+    def get_nodes(self, name, next_layer=False, last_layer=False):
+        name2node = {node.name: node for node in self.nodes()}
+        assert name in name2node.keys(), " Name must be uniqiue"
+        node = name2node[name]
+        if next_layer:
+            return self.successors(node)
+        elif last_layer:
+            return self.predecessors(node)
+        else:
+            return [node]
 
-    def to_model(self,input_shape):
+    def update(self):
+        self.type2ind={}
+        for node in self.nodes():
+            import re
+            ind=int(re.findall('\d+',node.name)[0])
+            self.type2ind[node.type]=self.type2ind.get(node.type,[])+[ind]
+
+
+    def deeper(self,name,new_node):
+        node=self.get_nodes(name=name)[0]
+
+        if new_node.name == 'new':
+            self.update()
+            new_name=new_node.type+str(1+max(self.type2ind[new_node.type]))
+            new_node.name =new_name
+
+        if new_node.config['filters'] == 'same':
+            new_node.config['filters']=node.config['filters']
+
+
+
+    def to_model(self, input_shape):
         graph_helper = self.copy()
 
         assert nx.is_directed_acyclic_graph(graph_helper)
@@ -78,7 +119,7 @@ class MyGraph(nx.DiGraph):
 
             elif node.type == 'Activation':
                 activation_type = node.config['activation_type']
-                layer = Activation(activation=activation_type,name=node.name)
+                layer = Activation(activation=activation_type, name=node.name)
 
             graph_helper.add_node(node, layer=layer)
             layer_output_tensor = layer(layer_input_tensor)
@@ -90,34 +131,43 @@ class MyGraph(nx.DiGraph):
 
         return Model(inputs=input_tensor, outputs=output_tensor)
 
+    def to_json(self):
+        data = json_graph.node_link_data(self)
+        return json.dumps(data,indent=2,cls=CustomTypeEncoder)
+
+
 class MyModel(object):
-    def __init__(self,config=None,graph=None,model=None):
+    def __init__(self, config=None, graph=None, model=None):
         if config is not None:
             self.config = config
         else:
-            self.config=Config()
+            self.config = Config()
 
         if model is not None:
-            self.config=model.config
-            self.graph=model.graph.copy()
-            self.model=self.graph.to_model(self.config.input_shape)
+            self.config = model.config
+            self.graph = model.graph.copy()
+            self.model = self.graph.to_model(self.config.input_shape)
 
         elif graph is not None:
-            self.graph=graph
-            self.model=self.graph.to_model(self.config.input_shape)
+            self.graph = graph
+            self.model = self.graph.to_model(self.config.input_shape)
 
         self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
                                             min_lr=0.5e-7)
         self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
         self.csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
 
-    def update(self):
-        # TODO update type2inds
-        pass
 
-    def get_layer(self, name, next_layer=False, last_layer=False):
-        # for functional model
-        pass
+
+    def get_layers(self, name, next_layer=False, last_layer=False):
+        name2layer = {layer.name: layer for layer in self.model.layers}
+        def _get_layer(name):
+            return name2layer[name]
+        nodes=self.graph.get_nodes(name, next_layer, last_layer)
+        if not isinstance(nodes,list):
+            nodes=[nodes]
+        return map(_get_layer,[node.name for node in nodes])
+
 
     def compile(self):
         self.model.compile(optimizer='rmsprop',
@@ -131,7 +181,7 @@ class MyModel(object):
                        validation_data=(self.config.dataset['test_x'], self.config.dataset['test_y']),
                        batch_size=self.config.batch_size,
                        epochs=self.config.epochs,
-                       # callbacks=[self.lr_reducer,self.early_stopper,self.csv_logger]
+                       callbacks=[self.lr_reducer,self.early_stopper,self.csv_logger]
                        )
 
     def evaluate(self):
@@ -144,8 +194,9 @@ class MyModel(object):
         self.compile()
         self.fit()
         score = self.evaluate()
-        print('\n-- score --\n')
+        print('\n-- loss and accuracy --\n')
         print(score)
+
 
 if __name__ == "__main__":
 
@@ -154,12 +205,12 @@ if __name__ == "__main__":
         config = Config(epochs=0, verbose=1, limit_data=9999)
     else:
         config = Config(epochs=100, verbose=1, limit_data=1)
-    model_l= [["Conv2D", 'conv1', {'filters': 64}],
-                                     ["Conv2D", 'conv2', {'filters': 64}],
-                                     ["Conv2D", 'conv3', {'filters': 10}],
-                                     ['GlobalMaxPooling2D', 'gmpool1', {}],
-                                     ['Activation', 'activation1', {'activation_type': 'softmax'}]]
-    graph=MyGraph(model_l)
-    teacher_model = MyModel(config,graph)
+    model_l = [["Conv2D", 'conv1', {'filters': 64}],
+               ["Conv2D", 'conv2', {'filters': 64}],
+               ["Conv2D", 'conv3', {'filters': 10}],
+               ['GlobalMaxPooling2D', 'gmpool1', {}],
+               ['Activation', 'activation1', {'activation_type': 'softmax'}]]
+    graph = MyGraph(model_l)
+    teacher_model = MyModel(config, graph)
 
     teacher_model.comp_fit_eval()
