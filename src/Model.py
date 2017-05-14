@@ -3,12 +3,13 @@ import networkx as nx
 import numpy as np
 import os.path as osp
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
-from keras.layers import Conv2D, Input, Activation
+from keras.layers import Conv2D, Input, Activation, GlobalMaxPooling2D
 from keras.models import Model
+from keras.backend import tensorflow_backend as ktf
 from networkx.readwrite import json_graph
 
 from Config import Config
-from Init import root_dir
+import Init
 
 
 class Node(object):
@@ -108,34 +109,65 @@ class MyGraph(nx.DiGraph):
             pre_nodes = graph_helper.predecessors(node)
             suc_nodes = graph_helper.successors(node)
             # TODO Now single input; future multiple input; use len to judge
-            if len(pre_nodes) == 0:
-                layer_input_tensor = input_tensor
+            if node.type not in ['Concatenate','Add']:
+                if len(pre_nodes) == 0:
+                    layer_input_tensor = input_tensor
+                else:
+                    assert len(pre_nodes) == 1
+                    layer_input_tensor = graph_helper[pre_nodes[0]][node]['tensor']
+
+                if node.type == 'Conv2D':
+                    kernel_size = node.config.get('kernel_size', 3)
+                    filters = node.config['filters']
+
+                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name)
+
+                elif node.type == 'GlobalMaxPooling2D':
+                    layer = keras.layers.GlobalMaxPooling2D(name=node.name)
+
+                elif node.type == 'Activation':
+                    activation_type = node.config['activation_type']
+                    layer = Activation(activation=activation_type, name=node.name)
+                layer_output_tensor = layer(layer_input_tensor)
             else:
-                assert len(pre_nodes) == 1
-                layer_input_tensor = graph_helper[pre_nodes[0]][node]['tensor']
+                layer_input_tensors= [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
+                if node.type=='Concatenate' :
+                    # handle shape
+                    layer_input_tensors_shapes=[
+                         ktf.int_shape(layer_input_tensor)[2:] for layer_input_tensor in layer_input_tensors
+                    ]
+                    layer_input_tensors_shapes=np.array(layer_input_tensors_shapes)
+                    new_shape=layer_input_tensors_shapes.min(axis=0)
+                    layer_input_tensors= [
+                        MyGraph.my_resize(layer_input_tensor,new_shape=new_shape)
+                        for layer_input_tensor in layer_input_tensors
+                    ]
 
-            if node.type == 'Conv2D':
-                kernel_size = node.config.get('kernel_size', 3)
-                filters = node.config['filters']
-
-                layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name)
-
-            elif node.type == 'GlobalMaxPooling2D':
-                layer = keras.layers.GlobalMaxPooling2D(name=node.name)
-
-            elif node.type == 'Activation':
-                activation_type = node.config['activation_type']
-                layer = Activation(activation=activation_type, name=node.name)
+                    layer=keras.layers.Concatenate(axis=0)
+                layer_output_tensor = layer(layer_input_tensors)
 
             graph_helper.add_node(node, layer=layer)
-            layer_output_tensor = layer(layer_input_tensor)
+
             if len(suc_nodes) == 0:
-                output_tensor = layer_input_tensor
+                output_tensor = layer_output_tensor
             else:
                 for suc_node in suc_nodes:
                     graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
 
         return Model(inputs=input_tensor, outputs=output_tensor)
+
+    @staticmethod
+    def my_resize(x,new_shape):
+        import tensorflow as tf
+        # original_shape = ktf.int_shape(x)
+        new_shape = tf.shape(x)[2:]
+        new_shape *= tf.constant(np.array(new_shape).astype('int32'))
+        x = ktf.permute_dimensions(x, [0, 2, 3, 1])
+        x = tf.image.resize_nearest_neighbor(x, new_shape)
+        x = ktf.permute_dimensions(x, [0, 3, 1, 2])
+
+        return  x
+
 
     def to_json(self):
         data = json_graph.node_link_data(self)
@@ -161,7 +193,7 @@ class MyModel(object):
         self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
                                             min_lr=0.5e-7)
         self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
-        self.csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
+        self.csv_logger = CSVLogger(osp.join(Init.root_dir, 'output', 'net2net.csv'))
 
 
 

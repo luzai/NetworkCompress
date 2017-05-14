@@ -4,8 +4,11 @@ import os.path as osp
 from Init import root_dir
 from keras.utils import vis_utils
 from Model import  MyModel
-# for python
 
+# TODO for python and ipython vis
+# TODO tf function like summary in callback, grap_def to dot, get output_tensor
+# for python
+# TODO map length name to clean ones
 def vis_model(model, name='net2net'):
     if  isinstance(model,MyModel):
         model=model.model
