@@ -6,11 +6,11 @@
 *.JPEG
 *.model
 *.png
-!demo/*.png
 !doc/*.png
 *.log*
 *.json
 *.pdf
+!ref/*.pdf
 *.pkl
 *.csv
 *.swp

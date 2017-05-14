@@ -14,6 +14,7 @@ from Init import root_dir
 from Log import logger
 from Model import MyModel,MyGraph
 from Config import Config
+import Utils
 
 class Net2Net(object):
 
@@ -33,7 +34,7 @@ class Net2Net(object):
         w_conv1, b_conv1 = model.get_layers(name)[0].get_weights()
         w_conv2, b_conv2 = model.get_layers(name, next_layer=True)[0].get_weights()
 
-        new_w_conv1, new_b_conv1, new_w_conv2 = self._wider_conv2d_weight(
+        new_w_conv1, new_b_conv1, new_w_conv2 = Net2Net._wider_conv2d_weight(
             w_conv1, b_conv1, w_conv2, new_width, "net2wider")
 
         new_model.get_layers(name)[0].set_weights([new_w_conv1, new_b_conv1])
@@ -56,30 +57,34 @@ class Net2Net(object):
         new_model=MyModel(config=model.config,graph=new_graph)
 
         # inherit weight
-        w_conv1, b_conv1 = model.get_layers(name, last_layer=True).get_weights()
-        w_conv2, b_conv2 = model.get_layers(name).get_weights()
+        w_conv1, b_conv1 = new_model.get_layers(name)[0].get_weights()
+        w_conv2, b_conv2 = new_model.get_layers(name,next_layer=True)[0].get_weights()
 
-        new_w_conv2, new_b_conv2 = self._deeper_conv2d_weight(
+        new_w_conv2, new_b_conv2 = Net2Net._deeper_conv2d_weight(
             w_conv1, b_conv1, w_conv2, b_conv2, "net2deeper")
 
-        new_model.get_layers(name).set_weights([new_w_conv2, new_b_conv2])
+        new_model.get_layers(name,next_layer=True)[0].set_weights([new_w_conv2, new_b_conv2])
+
+        return new_model
+
 
     @staticmethod
     def _deeper_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, teacher_b2, init='net2deeper'):
-        student_w, student_b \
-            = map(Net2Net._common_conv2d_weight,
-                  (teacher_w1, teacher_w2.shape),
-                  (teacher_b1, teacher_b2.shape))
+        student_w, student_b=Net2Net._common_conv2d_weight(teacher_w1, teacher_b1, teacher_w2.shape, teacher_b2.shape)
+        # student_w, student_b \
+        #     = map(Net2Net._common_conv2d_weight,
+        #           (teacher_w1, teacher_w2.shape),
+        #           (teacher_b1, teacher_b2.shape))
         return student_w, student_b
 
     @staticmethod
     def _common_conv2d_weight(w, b, nw_size, nb_size):
-        def convert_weight(w, nw_size):
-            w_size = w.shape
+        def convert_weight(weight, nw_size):
+            w_size = weight.shape
             assert len(w_size) == len(nw_size)
-            w_ratio = [nw / w for nw, w in zip(nw_size, w_size)]
-            nw = scipy.ndimage.zoom(w, w_ratio)
-            return nw
+            w_ratio = [_nw / _w for _nw, _w in zip(nw_size, w_size)]
+            new_weight = scipy.ndimage.zoom(weight, w_ratio)
+            return new_weight
 
         return convert_weight(w, nw_size), convert_weight(b, nb_size)
 
@@ -128,7 +133,7 @@ if __name__ == "__main__":
         config = Config(epochs=0, verbose=1, limit_data=9999)
     else:
         config = Config(epochs=100, verbose=1, limit_data=1)
-    model_l = [["Conv2D", 'conv1', {'filters': 64}],
+    model_l = [["Conv2D", 'conv1', {'filters': 16}],
                ["Conv2D", 'conv2', {'filters': 64}],
                ["Conv2D", 'conv3', {'filters': 10}],
                ['GlobalMaxPooling2D', 'gmpool1', {}],

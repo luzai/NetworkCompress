@@ -73,13 +73,16 @@ class MyGraph(nx.DiGraph):
         self.type2ind={}
         for node in self.nodes():
             import re
-            ind=int(re.findall('\d+',node.name)[0])
+            ind=int(re.findall('\w+(\d+)$',node.name)[0])
             self.type2ind[node.type]=self.type2ind.get(node.type,[])+[ind]
 
 
     def deeper(self,name,new_node):
         node=self.get_nodes(name=name)[0]
+        next_node=self.get_nodes(name=name,next_layer=True)[0]
+        # TODO maybe more than 1
 
+        # assign new node
         if new_node.name == 'new':
             self.update()
             new_name=new_node.type+str(1+max(self.type2ind[new_node.type]))
@@ -88,6 +91,9 @@ class MyGraph(nx.DiGraph):
         if new_node.config['filters'] == 'same':
             new_node.config['filters']=node.config['filters']
 
+        self.remove_edge(node,next_node)
+        self.add_edge(node,new_node)
+        self.add_edge(new_node,next_node)
 
 
     def to_model(self, input_shape):
@@ -205,7 +211,7 @@ if __name__ == "__main__":
         config = Config(epochs=0, verbose=1, limit_data=9999)
     else:
         config = Config(epochs=100, verbose=1, limit_data=1)
-    model_l = [["Conv2D", 'conv1', {'filters': 64}],
+    model_l = [["Conv2D", 'conv1', {'filters': 16}],
                ["Conv2D", 'conv2', {'filters': 64}],
                ["Conv2D", 'conv3', {'filters': 10}],
                ['GlobalMaxPooling2D', 'gmpool1', {}],
