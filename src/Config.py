@@ -64,8 +64,10 @@ class Config(object):
     def _preprocess_output(self, y):
         return np_utils.to_categorical(y, self.nb_class)
 
-    def _limit_data(self, x, div):
-        return x[:int(x.shape[0] // div)]
+    @staticmethod
+    def _limit_data(x, div):
+        div=float(div)
+        return x[:int( x.shape[0] / div),...]
 
     def load_data(self, limit_data):
         if Config.cache_data is None:
@@ -77,8 +79,8 @@ class Config(object):
 
             res = {'train_x': train_x, 'train_y': train_y, 'test_x': test_x, 'test_y': test_y}
 
-            for val in res.values():
-                self._limit_data(val, limit_data)
+            for key,val in res.iteritems():
+                res[key]=Config._limit_data(val, limit_data)
             Config.cache_data = res
         return Config.cache_data
 
