@@ -1,16 +1,20 @@
-import keras,json
+import json
+import keras
 import networkx as nx
 import numpy as np
 import os.path as osp
 import tensorflow as tf
-from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
-from keras.layers import Conv2D, Input, Activation, GlobalMaxPooling2D
-from keras.models import Model
 from keras.backend import tensorflow_backend as ktf
+from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
+from keras.layers import Conv2D, Input, Activation
+from keras.models import Model
 from networkx.readwrite import json_graph
 
+# from Init import root_dir
+root_dir = osp.normpath(
+    osp.join(osp.dirname(__file__), "..")
+)
 from Config import Config
-import Init
 
 
 class Node(object):
@@ -27,7 +31,6 @@ class Node(object):
 
 
 class CustomTypeEncoder(json.JSONEncoder):
-
     """A custom JSONEncoder class that knows how to encode core custom
     objects.
 
@@ -35,12 +38,14 @@ class CustomTypeEncoder(json.JSONEncoder):
     one key, '__TypeName__' where 'TypeName' is the actual name of the
     type to which the object belongs.  That single key maps to another
     object literal which is just the __dict__ of the object encoded."""
+
     # TYPES = {'Node': Node}
     def default(self, obj):
-        if isinstance(obj, Node) or isinstance(obj,keras.layers.Layer) :
+        if isinstance(obj, Node) or isinstance(obj, keras.layers.Layer):
             key = '__%s__' % obj.__class__.__name__
-            return { key: obj.__dict__}
+            return {key: obj.__dict__}
         return json.JSONEncoder.default(self, obj)
+
 
 class MyGraph(nx.DiGraph):
     def __init__(self, model_l=None):
@@ -72,34 +77,32 @@ class MyGraph(nx.DiGraph):
             return [node]
 
     def update(self):
-        self.type2ind={}
+        self.type2ind = {}
         for node in self.nodes():
             import re
-            ind=int(re.findall('\w+(\d+)$',node.name)[0])
-            self.type2ind[node.type]=self.type2ind.get(node.type,[])+[ind]
+            ind = int(re.findall('\w+(\d+)$', node.name)[0])
+            self.type2ind[node.type] = self.type2ind.get(node.type, []) + [ind]
 
-
-    def deeper(self,name,new_node):
-        node=self.get_nodes(name=name)[0]
-        next_node=self.get_nodes(name=name,next_layer=True)[0]
+    def deeper(self, name, new_node):
+        node = self.get_nodes(name=name)[0]
+        next_node = self.get_nodes(name=name, next_layer=True)[0]
         # TODO maybe more than 1
 
         # assign new node
         if new_node.name == 'new':
             self.update()
-            new_name=new_node.type+\
-                     str(
-                         1 + max( self.type2ind.get(new_node.type ,[0]) )
-                     )
-            new_node.name =new_name
+            new_name = new_node.type + \
+                       str(
+                           1 + max(self.type2ind.get(new_node.type, [0]))
+                       )
+            new_node.name = new_name
 
         if new_node.config['filters'] == 'same':
-            new_node.config['filters']=node.config['filters']
+            new_node.config['filters'] = node.config['filters']
 
-        self.remove_edge(node,next_node)
-        self.add_edge(node,new_node)
-        self.add_edge(new_node,next_node)
-
+        self.remove_edge(node, next_node)
+        self.add_edge(node, new_node)
+        self.add_edge(new_node, next_node)
 
     def to_model(self, input_shape):
         graph_helper = self.copy()
@@ -112,8 +115,8 @@ class MyGraph(nx.DiGraph):
         for node in topo_nodes:
             pre_nodes = graph_helper.predecessors(node)
             suc_nodes = graph_helper.successors(node)
-            # TODO Now single input; future multiple input; use len or type to judge
-            if node.type not in ['Concatenate','Add']:
+
+            if node.type not in ['Concatenate', 'Add','Multiply']:
                 if len(pre_nodes) == 0:
                     layer_input_tensor = input_tensor
                 else:
@@ -124,7 +127,7 @@ class MyGraph(nx.DiGraph):
                     kernel_size = node.config.get('kernel_size', 3)
                     filters = node.config['filters']
 
-                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name)
+                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='valid')
 
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)
@@ -134,20 +137,26 @@ class MyGraph(nx.DiGraph):
                     layer = Activation(activation=activation_type, name=node.name)
                 layer_output_tensor = layer(layer_input_tensor)
             else:
-                layer_input_tensors= [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
-                if node.type=='Concatenate' :
+                # TODO Add
+                layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
+                if node.type == 'Concatenate':
                     # handle shape
-                    layer_input_tensors_shapes=[
-                         ktf.int_shape(layer_input_tensor)[2:] for layer_input_tensor in layer_input_tensors
-                    ]
-                    layer_input_tensors_shapes=np.array(layer_input_tensors_shapes)
-                    new_shape=layer_input_tensors_shapes.min(axis=0)
-                    layer_input_tensors= [
-                        MyGraph.my_resize(layer_input_tensor,new_shape=new_shape)
-                        for layer_input_tensor in layer_input_tensors
-                    ]
+                    # Either switch to ROIPooling or MaxPooling
+                    # TODO consider ROIPooling
+                    ori_shapes = [
+                        ktf.int_shape(layer_input_tensor)[2:] for layer_input_tensor in layer_input_tensors
+                        ]
+                    ori_shapes = np.array(ori_shapes)
+                    new_shape = ori_shapes.min(axis=0)
+                    for ind, layer_input_tensor, ori_shape in \
+                            zip(range(len(layer_input_tensors)), layer_input_tensors, ori_shapes):
+                        diff_shape = ori_shape - new_shape
+                        if diff_shape.all():
+                            diff_shape +=1
+                            layer_input_tensors[ind] = keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(
+                                layer_input_tensor)
 
-                    layer=keras.layers.Concatenate(axis=1)
+                    layer = keras.layers.Concatenate(axis=1)
                 layer_output_tensor = layer(layer_input_tensors)
 
             graph_helper.add_node(node, layer=layer)
@@ -157,30 +166,31 @@ class MyGraph(nx.DiGraph):
             else:
                 for suc_node in suc_nodes:
                     graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
-        assert  tf.get_default_graph()==Config.tf_graph,"should be same"
-        tf.train.export_meta_graph('tmp.pbtxt',graph_def=tf.get_default_graph().as_graph_def())
+        assert tf.get_default_graph() == Config.tf_graph, "should be same"
+        # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
         assert 'output_tensor' in locals()
         return Model(inputs=input_tensor, outputs=output_tensor)
 
-    @staticmethod
-    def my_resize(x,new_shape):
-        import tensorflow as tf
-        # original_shape = ktf.int_shape(x)
-        # new_shape = tf.shape(x)
-        new_shape = tf.constant(np.array(new_shape).astype('int32'))
-        x = ktf.permute_dimensions(x, [0, 2, 3, 1])
-        x = tf.image.resize_nearest_neighbor(x, new_shape)
-        x = ktf.permute_dimensions(x, [0, 3, 1, 2])
-
-        return  x
+    # Decrypted
+    # @staticmethod
+    # def my_resize(x,new_shape):
+    #     import tensorflow as tf
+    #     # original_shape = ktf.int_shape(x)
+    #     # new_shape = tf.shape(x)
+    #     new_shape = tf.constant(np.array(new_shape).astype('int32'))
+    #     x = ktf.permute_dimensions(x, [0, 2, 3, 1])
+    #     x = tf.image.resize_nearest_neighbor(x, new_shape)
+    #     x = ktf.permute_dimensions(x, [0, 3, 1, 2])
+    #
+    #     return  x
 
 
     def to_json(self):
         data = json_graph.node_link_data(self)
-        try :
-            str=json.dumps(data, indent=2, cls=CustomTypeEncoder)
+        try:
+            str = json.dumps(data, indent=2, cls=CustomTypeEncoder)
         except Exception as inst:
-            str=""
+            str = ""
             print inst
 
         return str
@@ -205,19 +215,18 @@ class MyModel(object):
         self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
                                             min_lr=0.5e-7)
         self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
-        self.csv_logger = CSVLogger(osp.join(Init.root_dir, 'output', 'net2net.csv'))
-
-
+        self.csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
 
     def get_layers(self, name, next_layer=False, last_layer=False):
         name2layer = {layer.name: layer for layer in self.model.layers}
+
         def _get_layer(name):
             return name2layer[name]
-        nodes=self.graph.get_nodes(name, next_layer, last_layer)
-        if not isinstance(nodes,list):
-            nodes=[nodes]
-        return map(_get_layer,[node.name for node in nodes])
 
+        nodes = self.graph.get_nodes(name, next_layer, last_layer)
+        if not isinstance(nodes, list):
+            nodes = [nodes]
+        return map(_get_layer, [node.name for node in nodes])
 
     def compile(self):
         self.model.compile(optimizer='rmsprop',
@@ -231,7 +240,7 @@ class MyModel(object):
                        validation_data=(self.config.dataset['test_x'], self.config.dataset['test_y']),
                        batch_size=self.config.batch_size,
                        epochs=self.config.epochs,
-                       callbacks=[self.lr_reducer,self.early_stopper,self.csv_logger]
+                       callbacks=[self.lr_reducer, self.early_stopper, self.csv_logger]
                        )
 
     def evaluate(self):

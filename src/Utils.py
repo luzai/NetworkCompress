@@ -3,6 +3,7 @@ import json
 import subprocess
 
 import matplotlib
+
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -17,14 +18,17 @@ root_dir = osp.normpath(
 )
 from Model import MyModel
 
-from IPython.display import display, HTML
+from IPython.display import display, HTML, SVG
 import numpy as np
 
-# TODO for python and ipython vis
+
 # TODO tf function like summary in callback, grap_def to dot, get output_tensor
-# for python
 # TODO map length name to clean ones
-#SVG(model_to_dot(model2,show_shapes=True).create(prog='dot', format='svg'))
+
+def i_vis_model(model):
+    SVG(vis_utils.model_to_dot(model, show_shapes=True).create(prog='dot', format='svg'))
+
+
 def vis_model(model, name='net2net'):
     if isinstance(model, MyModel):
         model = model.model
@@ -38,8 +42,11 @@ def vis_model(model, name='net2net'):
             f,
             indent=2
         )
-    vis_utils.plot_model(model, to_file=name + '.pdf', show_shapes=True)
-    vis_utils.plot_model(model, to_file=name + '.png', show_shapes=True)
+    try:
+        vis_utils.plot_model(model, to_file=name + '.pdf', show_shapes=True)
+        vis_utils.plot_model(model, to_file=name + '.png', show_shapes=True)
+    except Exception as inst:
+        print inst
     os.chdir("../../src")
 
 
@@ -62,13 +69,14 @@ def nvidia_smi():
     (out, err) = proc.communicate()
     print "program output:", out
 
+
 def check_mem():
-    # TODO similarly
+    # TODO similar to above
     pass
 
 
 def print_graph_info():
-    graph=tf.get_default_graph()
+    graph = tf.get_default_graph()
     graph.get_tensor_by_name("Placeholder:0")
     layers = [op.name for op in graph.get_operations() if op.type == "Placeholder"]
     print [graph.get_tensor_by_name(layer + ":0") for layer in layers]
@@ -114,7 +122,8 @@ def strip_consts(graph_def, max_const_size=32):
                 tensor.tensor_content = tf.compat.as_bytes("<stripped %d bytes>" % size)
     return strip_def
 
+
 # also test file
-if __name__ =="__main__":
-    plt.plot([1,2,4],[3,6,10])
+if __name__ == "__main__":
+    plt.plot([1, 2, 4], [3, 6, 10])
     plt.show()

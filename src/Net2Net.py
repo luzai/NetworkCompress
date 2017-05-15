@@ -14,23 +14,23 @@ from Model import MyModel, MyGraph, Node
 
 class Net2Net(object):
     def skip(self, model, from_name, to_name):
-        new_graph=model.graph.copy()
-        node1=new_graph.get_nodes(from_name)[0]
-        node2=new_graph.get_nodes(to_name)[0]
-        node3=new_graph.get_nodes(to_name,next_layer=True)[0]
+        new_graph = model.graph.copy()
+        node1 = new_graph.get_nodes(from_name)[0]
+        node2 = new_graph.get_nodes(to_name)[0]
+        node3 = new_graph.get_nodes(to_name, next_layer=True)[0]
         new_graph.update()
-        new_name='Concatenate'+\
-                     str(
-                         1 + max( new_graph.type2ind.get('Concatenate',[0]) )
-                     )
-        new_node=Node(type='Concatenate',name=new_name,config={})  # we use channel first, will set axis = 1 latter
+        new_name = 'Concatenate' + \
+                   str(
+                       1 + max(new_graph.type2ind.get('Concatenate', [0]))
+                   )
+        new_node = Node(type='Concatenate', name=new_name, config={})  # we use channel first, will set axis = 1 latter
         new_graph.add_node(new_node)
-        new_graph.remove_edge(node2,node3)
-        new_graph.add_edge(node1,new_node)
-        new_graph.add_edge(node2,new_node)
-        new_graph.add_edge(new_node,node3)
+        new_graph.remove_edge(node2, node3)
+        new_graph.add_edge(node1, new_node)
+        new_graph.add_edge(node2, new_node)
+        new_graph.add_edge(new_node, node3)
         logger.debug(new_graph.to_json())
-        new_model=MyModel(config=model.config,graph=new_graph)
+        new_model = MyModel(config=model.config, graph=new_graph)
 
         # handle weight
 
@@ -139,7 +139,7 @@ class Net2Net(object):
 
 if __name__ == "__main__":
 
-    dbg = True
+    dbg = False
     if dbg:
         config = Config(epochs=0, verbose=1, limit_data=9999)
     else:
@@ -155,9 +155,9 @@ if __name__ == "__main__":
     teacher_model.comp_fit_eval()
 
     net2net = Net2Net()
-    student_model=MyModel(config=config,model=teacher_model)
-    # student_model = net2net.wider_conv2d(student_model, name='Conv2D2', width_ratio=2)
-    # student_model = net2net.deeper_conv2d(student_model, name='Conv2D2')
+    student_model = MyModel(config=config, model=teacher_model)
+    student_model = net2net.wider_conv2d(student_model, name='Conv2D2', width_ratio=2)
+    student_model = net2net.deeper_conv2d(student_model, name='Conv2D2')
     student_model = net2net.skip(student_model, from_name='Conv2D1', to_name='Conv2D2')
 
     Utils.vis_model(student_model, 'student')
