@@ -59,7 +59,10 @@ def vis_graph(graph, name='net2net'):
 
     plt.close('all')
     nx.draw(graph, with_labels=True)
-
+    try:
+        plt.show()
+    except Exception as inst:
+        print inst
     plt.savefig('graph.png')
     os.chdir("../../src")
 
@@ -70,10 +73,18 @@ def nvidia_smi():
     print "program output:", out
 
 
-def check_mem():
-    # TODO similar to above
-    pass
+def count_weight(model):
+    # TODO way 1 similar to above
+    # Way2
+    import  keras.backend as K
+    if isinstance(model,MyModel):
+        model=model.model
+    trainable_count = int(
+        np.sum([K.count_params(p) for p in set(model.trainable_weights)]))
+    non_trainable_count = int(
+        np.sum([K.count_params(p) for p in set(model.non_trainable_weights)]))
 
+    return  trainable_count,non_trainable_count
 
 def print_graph_info():
     graph = tf.get_default_graph()

@@ -5,6 +5,7 @@ from __future__ import print_function
 import numpy as np
 import scipy
 import scipy.ndimage
+import keras
 
 import Utils
 from Config import Config
@@ -150,16 +151,26 @@ if __name__ == "__main__":
                ['GlobalMaxPooling2D', 'GlobalMaxPooling2D1', {}],
                ['Activation', 'Activation1', {'activation_type': 'softmax'}]]
     graph = MyGraph(model_l)
-    teacher_model = MyModel(config, graph)
-    Utils.vis_model(teacher_model, 'teacher')
-    teacher_model.comp_fit_eval()
+    ori_model = MyModel(config, graph,name='origin')
+    Utils.vis_model(ori_model, 'origin')
+    # Utils.vis_graph(teacher_model.graph,'origin')
+    # ori_model.model.summary()
+    ori_model.comp_fit_eval()
+
+    trainable_count, non_trainable_count =  Utils.count_weight(ori_model)
+    print(trainable_count,non_trainable_count)
 
     net2net = Net2Net()
-    student_model = MyModel(config=config, model=teacher_model)
-    student_model = net2net.wider_conv2d(student_model, name='Conv2D2', width_ratio=2)
-    student_model = net2net.deeper_conv2d(student_model, name='Conv2D2')
-    student_model = net2net.skip(student_model, from_name='Conv2D1', to_name='Conv2D2')
+    later_model = MyModel(config=config, model=ori_model)
+    later_model = net2net.wider_conv2d(later_model, name='Conv2D2', width_ratio=2)
+    later_model = net2net.deeper_conv2d(later_model, name='Conv2D2')
+    later_model = net2net.skip(later_model, from_name='Conv2D1', to_name='Conv2D2')
+    # ori_model.model.summary()
+    Utils.vis_model(later_model, 'later')
+    trainable_count, non_trainable_count = Utils.count_weight(later_model)
+    print(trainable_count, non_trainable_count)
+    # Utils.vis_graph(student_model.graph, 'later')
+    later_model.set_name('later')
 
-    Utils.vis_model(student_model, 'student')
-    student_model.comp_fit_eval()
+    later_model.comp_fit_eval()
     # from IPython import embed; embed()

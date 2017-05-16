@@ -1,4 +1,5 @@
 import json
+
 import keras
 import networkx as nx
 import numpy as np
@@ -77,6 +78,7 @@ class MyGraph(nx.DiGraph):
             return [node]
 
     def update(self):
+
         self.type2ind = {}
         for node in self.nodes():
             import re
@@ -116,7 +118,7 @@ class MyGraph(nx.DiGraph):
             pre_nodes = graph_helper.predecessors(node)
             suc_nodes = graph_helper.successors(node)
 
-            if node.type not in ['Concatenate', 'Add','Multiply']:
+            if node.type not in ['Concatenate', 'Add', 'Multiply']:
                 if len(pre_nodes) == 0:
                     layer_input_tensor = input_tensor
                 else:
@@ -152,9 +154,9 @@ class MyGraph(nx.DiGraph):
                             zip(range(len(layer_input_tensors)), layer_input_tensors, ori_shapes):
                         diff_shape = ori_shape - new_shape
                         if diff_shape.all():
-                            diff_shape +=1
-                            layer_input_tensors[ind] = keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(
-                                layer_input_tensor)
+                            diff_shape += 1
+                            layer_input_tensors[ind] = \
+                                keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(layer_input_tensor)
 
                     layer = keras.layers.Concatenate(axis=1)
                 layer_output_tensor = layer(layer_input_tensors)
@@ -196,8 +198,18 @@ class MyGraph(nx.DiGraph):
         return str
 
 
+from keras.callbacks import TensorBoard
+
+
 class MyModel(object):
-    def __init__(self, config=None, graph=None, model=None):
+    def set_name(self, name):
+        self.name = name
+        self.log_dir = osp.join(root_dir, 'output/tf_tmp/', name)
+
+    def __init__(self, config=None, graph=None, model=None, name='default_name'):
+        self.name = name
+        # TODO Also need method to clean dir
+        self.log_dir = osp.join(root_dir, 'output/tf_tmp/', name)
         if config is not None:
             self.config = config
         else:
@@ -240,7 +252,8 @@ class MyModel(object):
                        validation_data=(self.config.dataset['test_x'], self.config.dataset['test_y']),
                        batch_size=self.config.batch_size,
                        epochs=self.config.epochs,
-                       callbacks=[self.lr_reducer, self.early_stopper, self.csv_logger]
+                       callbacks=[self.lr_reducer, self.early_stopper, self.csv_logger,
+                                  TensorBoard(log_dir=self.log_dir)]
                        )
 
     def evaluate(self):
