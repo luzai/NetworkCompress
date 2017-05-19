@@ -14,7 +14,15 @@ Contributor: @luzai, @miibotree
 
 
 ## TODO list:
-
+@miibotree
+- [ ] Consider wider a layer whose successor is skip structure. 
+- [ ] Weight intialization of skip. 
+- [ ] The propobility of adding Maxpooling layer inversely propto depth (constrain the number of MaxPooling layers)
+- [ ] The ratio of widening propto depth 
+- [ ] Propobility of 5 mutation operations 
+- [ ] group rand select in [1,2,4,8], initialize the weights.
+- [ ] BN? and ReLU
+ 
 - [ ] wider_conv, deeper_conv
     - [ ] New compy weight method 'Resize3D'(numpy?)
     - [ ] Dropout

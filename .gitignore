@@ -10,7 +10,8 @@
 *.log*
 *.json
 *.pdf
-!ref/*.pdf
+!ref/*
+!ref/**/*
 *.pkl
 *.csv
 *.swp
