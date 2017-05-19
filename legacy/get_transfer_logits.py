@@ -51,7 +51,7 @@ print(layer_names)
 
 # 3. save teacher model's logits
 teacher_logits_output = K.function([teacher_model.layers[0].input, K.learning_phase()],
-                                   [teacher_model.get_node(layer_names[-2]).output])
+                                  [teacher_model.get_layer(layer_names[-2]).output])
 
 #layer_output = teacher_logits_output([transfer_x, 0])[0]
 layer_output = []

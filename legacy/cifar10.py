@@ -7,13 +7,14 @@ GPU run command with Theano backend (with TensorFlow, the GPU is automatically u
 """
 
 from __future__ import print_function
-
-from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping, ModelCheckpoint
+from keras.datasets import cifar10
 from keras.preprocessing.image import ImageDataGenerator
+from keras.utils import np_utils
+from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping, ModelCheckpoint
+import numpy as np
 
 import resnet
-from Net2Net import *
-
+from net2net import *
 lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=5, min_lr=0.5e-6)
 early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
 csv_logger = CSVLogger('../output/resnet18_cifar10.csv')
@@ -46,7 +47,7 @@ X_test -= mean_image
 X_train /= 128.
 X_test /= 128.
 
-from Net2Net import  save_model_config
+from net2net import  save_model_config
 
 model = resnet.ResnetBuilder.build_resnet_18((img_channels, img_rows, img_cols), nb_classes)
 save_model_config(model,"resnet")

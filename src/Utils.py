@@ -19,7 +19,6 @@ root_dir = osp.normpath(
 from Model import MyModel
 
 from IPython.display import display, HTML, SVG
-import numpy as np
 
 
 # TODO tf function like summary in callback, grap_def to dot, get output_tensor
@@ -73,18 +72,22 @@ def nvidia_smi():
     print "program output:", out
 
 
+import numpy as np
+import keras.backend as K
+
+
 def count_weight(model):
     # TODO way 1 similar to above
     # Way2
-    import  keras.backend as K
-    if isinstance(model,MyModel):
-        model=model.model
-    trainable_count = int(
-        np.sum([K.count_params(p) for p in set(model.trainable_weights)]))
-    non_trainable_count = int(
-        np.sum([K.count_params(p) for p in set(model.non_trainable_weights)]))
 
-    return  trainable_count,non_trainable_count
+    if isinstance(model, MyModel):
+        model = model.model
+    trainable_count = np.sum([K.count_params(p) for p in set(model.trainable_weights)])
+
+    non_trainable_count = np.sum([K.count_params(p) for p in set(model.non_trainable_weights)])
+
+    return trainable_count, non_trainable_count
+
 
 def print_graph_info():
     graph = tf.get_default_graph()

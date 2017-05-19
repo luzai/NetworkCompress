@@ -82,7 +82,7 @@ class MyGraph(nx.DiGraph):
         self.type2ind = {}
         for node in self.nodes():
             import re
-            ind = int(re.findall('\w+(\d+)$', node.name)[0])
+            ind = int(re.findall(r'\w+(\d+)$', node.name)[0])
             self.type2ind[node.type] = self.type2ind.get(node.type, []) + [ind]
 
     def deeper(self, name, new_node):
