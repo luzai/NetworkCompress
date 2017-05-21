@@ -5,16 +5,34 @@ from __future__ import print_function
 import numpy as np
 import scipy
 import scipy.ndimage
-import keras
 
-import Utils
-from Config import Config
-from Log import logger
+from Config import MyConfig, logger
 from Model import MyModel, MyGraph, Node
 
 
 class Net2Net(object):
-    def skip(self, model, from_name, to_name):
+    @staticmethod
+    def my_model2model(model):
+        if isinstance(model, MyModel):
+            return model.model
+        else:
+            return model
+
+    def copy_weight(self, before_model, after_model):
+        # TODO  check
+        _before_model = self.my_model2model(model=before_model)
+        _after_model = self.my_model2model(model=after_model)
+
+        layer_names = [l.name for l in _before_model.layers]
+        for name in layer_names:
+            weights = _before_model.get_layer(name=name).get_weights()
+            try:
+                _after_model.get_layer(name=name).set_weights(weights)
+            except Exception as inst:
+                logger.warning("except {}".format(inst))
+
+    def skip(self, model, from_name, to_name, config=MyConfig()):
+
         new_graph = model.graph.copy()
         node1 = new_graph.get_nodes(from_name)[0]
         node2 = new_graph.get_nodes(to_name)[0]
@@ -31,58 +49,57 @@ class Net2Net(object):
         new_graph.add_edge(node2, new_node)
         new_graph.add_edge(new_node, node3)
         logger.debug(new_graph.to_json())
-        new_model = MyModel(config=model.config, graph=new_graph)
-
-        # handle weight
+        new_model = MyModel(config=config, graph=new_graph)
+        self.copy_weight(model, new_model)
 
         return new_model
 
-    def wider_conv2d(self, model, name, width_ratio):
+    def wider_conv2d(self, model, layer_name, width_ratio, config=MyConfig()):
         # modify graph
         new_graph = model.graph.copy()
-        new_node = new_graph.get_nodes(name)[0]
+        new_node = new_graph.get_nodes(layer_name)[0]
         assert new_node.type == 'Conv2D', 'must wide a conv'
         new_width = new_node.config['filters'] * width_ratio
         new_node.config['filters'] = new_width
 
         logger.debug(new_graph.to_json())
         # construct model
-        new_model = MyModel(config=model.config, graph=new_graph)
+        new_model = MyModel(config=config, graph=new_graph)
 
         # inherit weight
-        w_conv1, b_conv1 = model.get_layers(name)[0].get_weights()
-        w_conv2, b_conv2 = model.get_layers(name, next_layer=True)[0].get_weights()
+        w_conv1, b_conv1 = model.get_layers(layer_name)[0].get_weights()
+        w_conv2, b_conv2 = model.get_layers(layer_name, next_layer=True)[0].get_weights()
 
         new_w_conv1, new_b_conv1, new_w_conv2 = Net2Net._wider_conv2d_weight(
             w_conv1, b_conv1, w_conv2, new_width, "net2wider")
 
-        new_model.get_layers(name)[0].set_weights([new_w_conv1, new_b_conv1])
-        new_model.get_layers(name, next_layer=True)[0].set_weights([new_w_conv2, b_conv2])
-
+        new_model.get_layers(layer_name)[0].set_weights([new_w_conv1, new_b_conv1])
+        new_model.get_layers(layer_name, next_layer=True)[0].set_weights([new_w_conv2, b_conv2])
+        self.copy_weight(model, new_model)
         return new_model
 
-    def deeper_conv2d(self, model, name, kernel_size=3, filters='same'):
+    def deeper_conv2d(self, model, layer_name, kernel_size=3, filters='same', config=MyConfig()):
         # construct graph
         new_graph = model.graph.copy()
 
         new_node = Node(type='Conv2D', name='new',
                         config={'kernel_size': kernel_size, 'filters': filters}
                         )
-        new_graph.deeper(name, new_node)
+        new_graph.deeper(layer_name, new_node)
         logger.debug(new_graph.to_json())
 
         # construc model
         new_model = MyModel(config=model.config, graph=new_graph)
 
         # inherit weight
-        w_conv1, b_conv1 = new_model.get_layers(name)[0].get_weights()
-        w_conv2, b_conv2 = new_model.get_layers(name, next_layer=True)[0].get_weights()
+        w_conv1, b_conv1 = new_model.get_layers(layer_name)[0].get_weights()
+        w_conv2, b_conv2 = new_model.get_layers(layer_name, next_layer=True)[0].get_weights()
 
         new_w_conv2, new_b_conv2 = Net2Net._deeper_conv2d_weight(
             w_conv1, b_conv1, w_conv2, b_conv2, "net2deeper")
 
-        new_model.get_layers(name, next_layer=True)[0].set_weights([new_w_conv2, new_b_conv2])
-
+        new_model.get_layers(layer_name, next_layer=True)[0].set_weights([new_w_conv2, new_b_conv2])
+        self.copy_weight(model, new_model)
         return new_model
 
     @staticmethod
@@ -140,37 +157,25 @@ class Net2Net(object):
 
 if __name__ == "__main__":
 
-    dbg = False
+    dbg = True
     if dbg:
-        config = Config(epochs=0, verbose=1, limit_data=9999)
+        config = MyConfig(epochs=0, verbose=1, dbg=dbg, name='before')
     else:
-        config = Config(epochs=100, verbose=1, limit_data=1)
+        config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='before')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 16}],
                ["Conv2D", 'Conv2D2', {'filters': 64}],
                ["Conv2D", 'Conv2D3', {'filters': 10}],
                ['GlobalMaxPooling2D', 'GlobalMaxPooling2D1', {}],
                ['Activation', 'Activation1', {'activation_type': 'softmax'}]]
     graph = MyGraph(model_l)
-    ori_model = MyModel(config, graph,name='origin')
-    Utils.vis_model(ori_model, 'origin')
-    # Utils.vis_graph(teacher_model.graph,'origin')
-    # ori_model.model.summary()
-    ori_model.comp_fit_eval()
-
-    trainable_count, non_trainable_count =  Utils.count_weight(ori_model)
-    print(trainable_count,non_trainable_count)
+    before_model = MyModel(config, graph)
+    before_model.comp_fit_eval()
 
     net2net = Net2Net()
-    later_model = MyModel(config=config, model=ori_model)
-    later_model = net2net.wider_conv2d(later_model, name='Conv2D2', width_ratio=2)
-    later_model = net2net.deeper_conv2d(later_model, name='Conv2D2')
-    later_model = net2net.skip(later_model, from_name='Conv2D1', to_name='Conv2D2')
-    # ori_model.model.summary()
-    Utils.vis_model(later_model, 'later')
-    trainable_count, non_trainable_count = Utils.count_weight(later_model)
-    print(trainable_count, non_trainable_count)
-    # Utils.vis_graph(student_model.graph, 'later')
-    later_model.set_name('later')
+    after_config = config.copy(name='after')
+    after_model = net2net.wider_conv2d(before_model, layer_name='Conv2D2', width_ratio=2)
+    after_model = net2net.deeper_conv2d(after_model, layer_name='Conv2D2')
+    after_model = net2net.skip(after_model, from_name='Conv2D1', to_name='Conv2D2', config=after_config)
 
-    later_model.comp_fit_eval()
+    after_model.comp_fit_eval()
     # from IPython import embed; embed()

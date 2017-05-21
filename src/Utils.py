@@ -16,7 +16,6 @@ from keras.utils import vis_utils
 root_dir = osp.normpath(
     osp.join(osp.dirname(__file__), "..")
 )
-from Model import MyModel
 
 from IPython.display import display, HTML, SVG
 
@@ -24,13 +23,17 @@ from IPython.display import display, HTML, SVG
 # TODO tf function like summary in callback, grap_def to dot, get output_tensor
 # TODO map length name to clean ones
 
+def mkdir_p(name):
+    if tf.gfile.Exists(name):
+        tf.gfile.DeleteRecursively(name)
+    tf.gfile.MakeDirs(name)
+
+
 def i_vis_model(model):
     SVG(vis_utils.model_to_dot(model, show_shapes=True).create(prog='dot', format='svg'))
 
 
 def vis_model(model, name='net2net'):
-    if isinstance(model, MyModel):
-        model = model.model
     _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
     subprocess.call(_shell_cmd.split())
     os.chdir(osp.join(root_dir, "output", name))
@@ -49,7 +52,7 @@ def vis_model(model, name='net2net'):
     os.chdir("../../src")
 
 
-def vis_graph(graph, name='net2net'):
+def vis_graph(graph, name='net2net', show=False):
     _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
     subprocess.call(_shell_cmd.split())
     os.chdir(osp.join(root_dir, "output", name))
@@ -58,10 +61,11 @@ def vis_graph(graph, name='net2net'):
 
     plt.close('all')
     nx.draw(graph, with_labels=True)
-    try:
-        plt.show()
-    except Exception as inst:
-        print inst
+    if show:
+        try:
+            plt.show()
+        except Exception as inst:
+            print inst
     plt.savefig('graph.png')
     os.chdir("../../src")
 
@@ -77,14 +81,9 @@ import keras.backend as K
 
 
 def count_weight(model):
-    # TODO way 1 similar to above
-    # Way2
-
-    if isinstance(model, MyModel):
-        model = model.model
-    trainable_count = np.sum([K.count_params(p) for p in set(model.trainable_weights)])
-
-    non_trainable_count = np.sum([K.count_params(p) for p in set(model.non_trainable_weights)])
+    trainable_count = np.sum([K.count_params(p) for p in set(model.trainable_weights)]) * 4. / 1024. / 1024.
+    # convert to MB
+    non_trainable_count = np.sum([K.count_params(p) for p in set(model.non_trainable_weights)]) * 4. / 1024. / 1024.
 
     return trainable_count, non_trainable_count
 

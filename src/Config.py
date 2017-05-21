@@ -1,11 +1,20 @@
+# Dependency: Utils
 from __future__ import division
 from __future__ import print_function
+
 import argparse
+
+import keras.utils
 import numpy as np
+import os.path as osp
 import tensorflow as tf
 from keras import backend as K
+from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-import keras.utils
+
+import Utils
+from Utils import root_dir
+
 
 def parse_args():
     """Parse input arguments."""
@@ -27,10 +36,25 @@ def parse_args():
     _args = parser.parse_args()
     return _args
 
-# args=parse_args()
 
-class Config(object):
-    tf_graph=tf.get_default_graph()
+# args=parse_args()
+import logging, sys
+
+# logging.basicConfig(filename='output/net2net.log', level=logging.DEBUG)
+
+logger = logging.getLogger('net2net')
+logger.setLevel(logging.INFO)
+
+ch = logging.StreamHandler(sys.stdout)
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s -  %(levelname)s -------- \n\t%(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+
+
+class MyConfig(object):
+    # for all model
+    tf_graph = tf.get_default_graph()
     _sess_config = tf.ConfigProto(
         allow_soft_placement=True,
         # log_device_placement = True,
@@ -42,16 +66,41 @@ class Config(object):
     sess = tf.Session(config=_sess_config, graph=tf_graph)
     K.set_session(sess)
     K.set_image_data_format("channels_first")
-
+    # # for all model, but determined when init the first config
     cache_data = None
 
-    def __init__(self, epochs=100, verbose=1, limit_data=1):
+    def copy(self, name='diff_name'):
+        new_config = MyConfig(self.epochs, self.verbose, self.dbg, name)
+        return new_config
+
+    def set_name(self, name):
+        self.name = name
+        self.tf_log_path = osp.join(root_dir, 'output/tf_tmp/', name)
+        self.output_path = osp.join(root_dir, 'output/', name)
+        Utils.mkdir_p(self.tf_log_path)
+        Utils.mkdir_p(self.output_path)
+
+    def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name'):
+        # for single model
+        self.set_name(name)
+        self.dbg = dbg
         self.input_shape = (3, 32, 32)
         self.nb_class = 10
         self.batch_size = 256
         self.epochs = epochs
         self.verbose = verbose
-        self.dataset = self.load_data(limit_data)
+        self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
+                                            min_lr=0.5e-7)
+        self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
+        self.csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
+
+        # for all model, but determined when init the first config
+        if dbg:
+            self.dataset = self.load_data(9999)
+            logger.setLevel(logging.DEBUG)
+        else:
+            self.dataset = self.load_data(1)
+            logger.setLevel(logging.INFO)
 
     def _preprocess_input(self, x, mean_image=None):
         x = x.reshape((-1,) + self.input_shape)
@@ -67,11 +116,11 @@ class Config(object):
 
     @staticmethod
     def _limit_data(x, div):
-        div=float(div)
-        return x[:int( x.shape[0] / div),...]
+        div = float(div)
+        return x[:int(x.shape[0] / div), ...]
 
     def load_data(self, limit_data):
-        if Config.cache_data is None:
+        if MyConfig.cache_data is None:
             (train_x, train_y), (test_x, test_y) = cifar10.load_data()
             train_x, mean_img = self._preprocess_input(train_x, None)
             test_x, _ = self._preprocess_input(test_x, mean_img)
@@ -80,8 +129,7 @@ class Config(object):
 
             res = {'train_x': train_x, 'train_y': train_y, 'test_x': test_x, 'test_y': test_y}
 
-            for key,val in res.iteritems():
-                res[key]=Config._limit_data(val, limit_data)
-            Config.cache_data = res
-        return Config.cache_data
-
+            for key, val in res.iteritems():
+                res[key] = MyConfig._limit_data(val, limit_data)
+            MyConfig.cache_data = res
+        return MyConfig.cache_data

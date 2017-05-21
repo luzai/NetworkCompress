@@ -14,6 +14,15 @@ Contributor: @luzai, @miibotree
 
 
 ## TODO list:
+- TODO list
+- Update readme 
+- write doc 
+- inherit weight 
+- more operation 
+- merge code 
+- tensorboard path maintain
+
+
 @miibotree
 - [ ] Consider wider a layer whose successor is skip structure. 
 - [ ] Weight intialization of skip. 

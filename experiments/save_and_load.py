@@ -4,7 +4,7 @@ import sys
 
 try:
     sys.path.insert(0, 'src')
-    from Config import Config
+    from Config import MyConfig
 except:
     pass
 

@@ -1,21 +1,19 @@
+# Dependenct: Utils, Config
 import json
 
 import keras
 import networkx as nx
 import numpy as np
-import os.path as osp
 import tensorflow as tf
 from keras.backend import tensorflow_backend as ktf
-from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
+from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Input, Activation
 from keras.models import Model
 from networkx.readwrite import json_graph
 
-# from Init import root_dir
-root_dir = osp.normpath(
-    osp.join(osp.dirname(__file__), "..")
-)
-from Config import Config
+import Config
+import Utils
+from Config import MyConfig
 
 
 class Node(object):
@@ -147,7 +145,7 @@ class MyGraph(nx.DiGraph):
                     # TODO consider ROIPooling
                     ori_shapes = [
                         ktf.int_shape(layer_input_tensor)[2:] for layer_input_tensor in layer_input_tensors
-                        ]
+                    ]
                     ori_shapes = np.array(ori_shapes)
                     new_shape = ori_shapes.min(axis=0)
                     for ind, layer_input_tensor, ori_shape in \
@@ -168,7 +166,7 @@ class MyGraph(nx.DiGraph):
             else:
                 for suc_node in suc_nodes:
                     graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
-        assert tf.get_default_graph() == Config.tf_graph, "should be same"
+        assert tf.get_default_graph() == Config.MyConfig.tf_graph, "should be same"
         # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
         assert 'output_tensor' in locals()
         return Model(inputs=input_tensor, outputs=output_tensor)
@@ -198,36 +196,17 @@ class MyGraph(nx.DiGraph):
         return str
 
 
-from keras.callbacks import TensorBoard
-
-
 class MyModel(object):
-    def set_name(self, name):
-        self.name = name
-        self.log_dir = osp.join(root_dir, 'output/tf_tmp/', name)
-
-    def __init__(self, config=None, graph=None, model=None, name='default_name'):
-        self.name = name
-        # TODO Also need method to clean dir
-        self.log_dir = osp.join(root_dir, 'output/tf_tmp/', name)
+    def __init__(self, config=None, graph=None):
         if config is not None:
             self.config = config
         else:
+            Config.logger.warning("config is None")
             self.config = Config()
 
-        if model is not None:
-            self.config = model.config
-            self.graph = model.graph.copy()
-            self.model = self.graph.to_model(self.config.input_shape)
-
-        elif graph is not None:
-            self.graph = graph
-            self.model = self.graph.to_model(self.config.input_shape)
-
-        self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
-                                            min_lr=0.5e-7)
-        self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
-        self.csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
+        assert graph is not None, "graph is not None"
+        self.graph = graph
+        self.model = self.graph.to_model(self.config.input_shape)
 
     def get_layers(self, name, next_layer=False, last_layer=False):
         name2layer = {layer.name: layer for layer in self.model.layers}
@@ -252,8 +231,8 @@ class MyModel(object):
                        validation_data=(self.config.dataset['test_x'], self.config.dataset['test_y']),
                        batch_size=self.config.batch_size,
                        epochs=self.config.epochs,
-                       callbacks=[self.lr_reducer, self.early_stopper, self.csv_logger,
-                                  TensorBoard(log_dir=self.log_dir)]
+                       callbacks=[self.config.lr_reducer, self.config.early_stopper, self.config.csv_logger,
+                                  TensorBoard(log_dir=self.config.tf_log_path)]
                        )
 
     def evaluate(self):
@@ -264,6 +243,13 @@ class MyModel(object):
 
     def comp_fit_eval(self):
         self.compile()
+        Utils.vis_model(self.model, self.config.name)
+        Utils.vis_graph(self.graph, self.config.name, show=False)  # self.config.dbg
+        self.model.summary()
+        trainable_count, non_trainable_count = Utils.count_weight(self.model)
+        Config.logger.info(
+            "trainable weight {} MB, non trainable_weight {} MB".format(trainable_count, non_trainable_count))
+
         self.fit()
         score = self.evaluate()
         print('\n-- loss and accuracy --\n')
@@ -274,9 +260,9 @@ if __name__ == "__main__":
 
     dbg = True
     if dbg:
-        config = Config(epochs=0, verbose=1, limit_data=9999)
+        config = MyConfig(epochs=0, verbose=1, dbg=dbg, name='model_test')
     else:
-        config = Config(epochs=100, verbose=1, limit_data=1)
+        config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='model_test')
     model_l = [["Conv2D", 'conv1', {'filters': 16}],
                ["Conv2D", 'conv2', {'filters': 64}],
                ["Conv2D", 'conv3', {'filters': 10}],
@@ -284,5 +270,4 @@ if __name__ == "__main__":
                ['Activation', 'activation1', {'activation_type': 'softmax'}]]
     graph = MyGraph(model_l)
     teacher_model = MyModel(config, graph)
-
     teacher_model.comp_fit_eval()
