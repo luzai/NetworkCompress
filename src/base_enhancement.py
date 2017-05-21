@@ -10,7 +10,7 @@ from keras.utils import plot_model
 import os
 import random
 import json
-
+import Config
 
 '''
     define original init model 

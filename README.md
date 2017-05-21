@@ -14,14 +14,12 @@ Contributor: @luzai, @miibotree
 
 
 ## TODO list:
-- TODO list
+@luzai 
 - Update readme 
 - write doc 
-- inherit weight 
-- more operation 
+- more operation  
 - merge code 
-- tensorboard path maintain
-
+- tensorboard summary for var  
 
 @miibotree
 - [ ] Consider wider a layer whose successor is skip structure. 

@@ -19,7 +19,7 @@ class Net2Net(object):
             return model
 
     def copy_weight(self, before_model, after_model):
-        # TODO  check
+
         _before_model = self.my_model2model(model=before_model)
         _after_model = self.my_model2model(model=after_model)
 
@@ -159,7 +159,7 @@ if __name__ == "__main__":
 
     dbg = True
     if dbg:
-        config = MyConfig(epochs=0, verbose=1, dbg=dbg, name='before')
+        config = MyConfig(epochs=0, verbose=2, dbg=dbg, name='before')
     else:
         config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='before')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 16}],
@@ -172,10 +172,9 @@ if __name__ == "__main__":
     before_model.comp_fit_eval()
 
     net2net = Net2Net()
-    after_config = config.copy(name='after')
-    after_model = net2net.wider_conv2d(before_model, layer_name='Conv2D2', width_ratio=2)
-    after_model = net2net.deeper_conv2d(after_model, layer_name='Conv2D2')
-    after_model = net2net.skip(after_model, from_name='Conv2D1', to_name='Conv2D2', config=after_config)
+    after_model = net2net.wider_conv2d(before_model, layer_name='Conv2D2', width_ratio=2,config=config.copy('wide'))
+    after_model = net2net.deeper_conv2d(after_model, layer_name='Conv2D2',config=config.copy('depper'))
+    after_model = net2net.skip(after_model, from_name='Conv2D1', to_name='Conv2D2', config=config.copy('skip'))
 
     after_model.comp_fit_eval()
     # from IPython import embed; embed()

@@ -1,4 +1,4 @@
-# TODO add vis util (ipython/python)
+
 import json
 import subprocess
 
@@ -20,7 +20,6 @@ root_dir = osp.normpath(
 from IPython.display import display, HTML, SVG
 
 
-# TODO tf function like summary in callback, grap_def to dot, get output_tensor
 # TODO map length name to clean ones
 
 def mkdir_p(name):
@@ -67,6 +66,7 @@ def vis_graph(graph, name='net2net', show=False):
         except Exception as inst:
             print inst
     plt.savefig('graph.png')
+    plt.close('all')
     os.chdir("../../src")
 
 

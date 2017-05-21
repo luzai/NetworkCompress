@@ -238,7 +238,7 @@ class MyModel(object):
     def evaluate(self):
         score = self.model.evaluate(self.config.dataset['test_x'],
                                     self.config.dataset['test_y'],
-                                    batch_size=self.config.batch_size)
+                                    batch_size=self.config.batch_size,verbose=self.config.verbose)
         return score
 
     def comp_fit_eval(self):
