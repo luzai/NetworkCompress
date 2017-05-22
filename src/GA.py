@@ -11,29 +11,6 @@ import Utils
 from Config import MyConfig
 from Model import MyModel, MyGraph
 from Net2Net import Net2Net
-
-
-# import keras
-# from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
-# from keras.datasets import cifar10
-# from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, Embedding,GlobalAveragePooling2D,GlobalMaxPool2D,GlobalMaxPooling2D
-# from keras.models import Sequential, model_from_json, Model
-# from keras.optimizers import SGD
-# from keras.utils import np_utils, vis_utils
-# from keras.preprocessing.image import ImageDataGenerator
-# from keras import backend as K
-#
-# import Config,Utils
-# from Net2Net import Net2Net
-# from Model import MyModel,MyGraph
-# import json
-# import random
-# from Config import MyConfig
-# from keras.layers import add, Input, Conv2D, MaxPooling2D, concatenate, GlobalMaxPooling2D
-# from keras.layers.core import Activation
-# from keras.models import Model
-# import  numpy as np
-
 import Queue
 class GA(object):
 
@@ -115,7 +92,7 @@ class GA(object):
             after_model=self.net2net.wider(before_model,config=new_config)
         elif evolution_choice=='add_skip':
             after_model = self.net2net.add_skip(before_model, config=new_config)
-
+        # TODO interface deep wide + weight copy
         # TODO single model now population future
         self.population.append(after_model)
 
@@ -135,8 +112,9 @@ class GA(object):
         for i in range(gl_config.evoluation_time):
             Config.logger.info("Now {} individual ".format(i))
             self.fit_model_process()
-            self.evolution_process()
             self.select_process()
+            self.evolution_process()
+
 
     def select_process(self):
         while len(self.population)>1:

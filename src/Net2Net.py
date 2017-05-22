@@ -7,6 +7,8 @@ import numpy as np
 import scipy
 import scipy.ndimage
 
+import keras.backend as K
+from keras.utils.conv_utils import convert_kernel
 from Config import MyConfig, logger
 from Model import MyModel, MyGraph, Node
 
@@ -123,17 +125,23 @@ class Net2Net(object):
         w_conv2, b_conv2 = new_model.get_layers(layer_name, next_layer=True)[0].get_weights()
 
         new_w_conv2, new_b_conv2 = Net2Net._deeper_conv2d_weight(
-            w_conv1, b_conv1, w_conv2, b_conv2, "net2deeper")
+            w_conv1)
 
         new_model.get_layers(layer_name, next_layer=True)[0].set_weights([new_w_conv2, new_b_conv2])
         self.copy_weight(model, new_model)
         return new_model
 
     @staticmethod
-    def _deeper_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, teacher_b2, init='net2deeper'):
-        student_w, student_b = \
-            Net2Net._convert_weight(teacher_w1, teacher_w2.shape), \
-            Net2Net._convert_weight(teacher_b1, teacher_b2.shape)
+    def _deeper_conv2d_weight(teacher_w1):
+        if K.image_data_format()=="Channels_last":
+            teacher_w1=convert_kernel(teacher_w1)
+        kw, kh, num_channel, filters = teacher_w1.shape
+        student_w = np.zeros((kw, kh, filters, filters))
+        for i in xrange(filters):
+            student_w[(kw - 1) // 2, (kh - 1) // 2, i, i] = 1.
+        student_b = np.zeros(filters)
+        if K.image_data_format()=="Channels_last":
+            student_w=convert_kernel(student_w)
         return student_w, student_b
 
     @staticmethod
@@ -147,8 +155,6 @@ class Net2Net(object):
     @staticmethod
     def _wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init, help=None):
 
-        import keras.backend as K
-        from keras.utils.conv_utils import convert_kernel
         if K.image_data_format()=="channels_last":
             _teacher_w1=convert_kernel(teacher_w1)
 
