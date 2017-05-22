@@ -84,12 +84,12 @@ class MyConfig(object):
     def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name',evoluation_time=1):
         # TODO check when name = 'default_name'
         # for ga:
-        self.evaluation_time=evoluation_time
+        self.evoluation_time=evoluation_time
 
         # for single model
         self.set_name(name)
         self.dbg = dbg
-        self.input_shape = (3, 32, 32)
+        self.input_shape = (3, 32, 32) if K.image_data_format()=="Channels_first" else (32,32,3)
         self.nb_class = 10
         self.batch_size = 256
         self.epochs = epochs

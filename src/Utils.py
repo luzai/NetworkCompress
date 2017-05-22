@@ -23,8 +23,9 @@ from IPython.display import display, HTML, SVG
 # TODO map length name to clean ones
 
 def mkdir_p(name,delete=True):
-    if delete and tf.gfile.Exists(name):
-        tf.gfile.DeleteRecursively(name)
+    # TODO it is not good for debug
+    # if delete and tf.gfile.Exists(name):
+    #     tf.gfile.DeleteRecursively(name)
     tf.gfile.MakeDirs(name)
 
 

@@ -80,7 +80,7 @@ class MyGraph(nx.DiGraph):
         self.type2ind = {}
         for node in self.nodes():
             import re
-            ind = int(re.findall(r'\w+(\d+)$', node.name)[0])
+            ind = int(re.findall(r'^\w+?(\d+)$', node.name)[0])
             self.type2ind[node.type] = self.type2ind.get(node.type, []) + [ind]
 
     def deeper(self, name, new_node):
@@ -207,14 +207,8 @@ class MyGraph(nx.DiGraph):
 
 
 class MyModel(object):
-    def __init__(self, config=None, graph=None):
-        if config is not None:
-            self.config = config
-        else:
-            Config.logger.warning("config is None")
-            self.config = Config()
-
-        assert graph is not None, "graph is not None"
+    def __init__(self, config, graph):
+        self.config = config
         self.graph = graph
         self.model = self.graph.to_model(self.config.input_shape)
 

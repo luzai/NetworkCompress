@@ -27,13 +27,13 @@ class Net2Net(object):
 
         while True:
             import random
-            choice=names[random.randint(0,len(names))]
+            choice=names[np.random.randint(0,len(names))]
             next_nodes= model.graph.get_nodes(choice,next_layer=True,last_layer=False)
             if 'GlobalMaxPooling2D' not in [ node.type for node in next_nodes]:
                 break
 
         # grow
-        return self.deeper_conv2d(model,choice,config)
+        return self.deeper_conv2d(model,choice,kernel_size=3,filters='same',config=config)
 
 
     def wider(self,model,config):
