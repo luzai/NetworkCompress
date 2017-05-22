@@ -69,7 +69,7 @@ if with_caffe == True:
 import keras
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, Embedding
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, Embedding,MaxPool2D,MaxPooling1D,AveragePooling2D
 from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
 from keras.utils import np_utils, vis_utils

@@ -127,11 +127,15 @@ class MyGraph(nx.DiGraph):
                     kernel_size = node.config.get('kernel_size', 3)
                     filters = node.config['filters']
 
-                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',activation='relu')
+                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
+                                   activation='relu')
 
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)
-
+                elif node.type == 'MaxPooling2D':
+                    layer = keras.layers.MaxPooling2D(name=node.name)
+                elif node.type == 'AveragePooling2D':
+                    layer = keras.layers.AveragePooling2D(name=node.name)
                 elif node.type == 'Activation':
                     activation_type = node.config['activation_type']
                     layer = Activation(activation=activation_type, name=node.name)
@@ -146,11 +150,12 @@ class MyGraph(nx.DiGraph):
                     import keras.backend as K
 
                     if K.image_data_format() == "channels_last":
-                        (width_ind,height_ind,chn_ind)=(1,2,3)
+                        (width_ind, height_ind, chn_ind) = (1, 2, 3)
                     else:
-                        (width_ind, height_ind, chn_ind) = (2,3,1)
+                        (width_ind, height_ind, chn_ind) = (2, 3, 1)
                     ori_shapes = [
-                        ktf.int_shape(layer_input_tensor)[width_ind:height_ind+1] for layer_input_tensor in layer_input_tensors
+                        ktf.int_shape(layer_input_tensor)[width_ind:height_ind + 1] for layer_input_tensor in
+                        layer_input_tensors
                     ]
                     ori_shapes = np.array(ori_shapes)
                     new_shape = ori_shapes.min(axis=0)
@@ -176,24 +181,10 @@ class MyGraph(nx.DiGraph):
         # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
         assert 'output_tensor' in locals()
         import time
-        tic=time.time()
-        model =Model(inputs=input_tensor, outputs=output_tensor)
-        Config.logger.info('Consume Time(Just Build model: {}'.format(time.time()-tic))
+        tic = time.time()
+        model = Model(inputs=input_tensor, outputs=output_tensor)
+        Config.logger.info('Consume Time(Just Build model: {}'.format(time.time() - tic))
         return model
-
-    # Decrypted
-    # @staticmethod
-    # def my_resize(x,new_shape):
-    #     import tensorflow as tf
-    #     # original_shape = ktf.int_shape(x)
-    #     # new_shape = tf.shape(x)
-    #     new_shape = tf.constant(np.array(new_shape).astype('int32'))
-    #     x = ktf.permute_dimensions(x, [0, 2, 3, 1])
-    #     x = tf.image.resize_nearest_neighbor(x, new_shape)
-    #     x = ktf.permute_dimensions(x, [0, 3, 1, 2])
-    #
-    #     return  x
-
 
     def to_json(self):
         data = json_graph.node_link_data(self)
@@ -230,7 +221,7 @@ class MyModel(object):
 
     def fit(self):
         import time
-        tic=time.time()
+        tic = time.time()
 
         self.model.fit(self.config.dataset['train_x'],
                        self.config.dataset['train_y'],
@@ -241,12 +232,12 @@ class MyModel(object):
                        callbacks=[self.config.lr_reducer, self.config.early_stopper, self.config.csv_logger,
                                   TensorBoard(log_dir=self.config.tf_log_path)]
                        )
-        Config.logger.info("Fit model Consume {}:".format(time.time()-tic))
+        Config.logger.info("Fit model Consume {}:".format(time.time() - tic))
 
     def evaluate(self):
         score = self.model.evaluate(self.config.dataset['test_x'],
                                     self.config.dataset['test_y'],
-                                    batch_size=self.config.batch_size,verbose=self.config.verbose)
+                                    batch_size=self.config.batch_size, verbose=self.config.verbose)
         return score
 
     def comp_fit_eval(self):
@@ -266,7 +257,7 @@ class MyModel(object):
 
 if __name__ == "__main__":
 
-    dbg = False
+    dbg = True
     if dbg:
         config = MyConfig(epochs=0, verbose=1, dbg=dbg, name='model_test')
     else:
