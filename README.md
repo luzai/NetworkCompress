@@ -15,6 +15,7 @@ Contributor: @luzai, @miibotree
 
 ## TODO list:
 @luzai 
+- weight init for deeper 
 - Update readme 
 - write doc 
 - more operation  

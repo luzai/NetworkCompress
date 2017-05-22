@@ -127,7 +127,7 @@ class MyGraph(nx.DiGraph):
                     kernel_size = node.config.get('kernel_size', 3)
                     filters = node.config['filters']
 
-                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same')
+                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',activation='relu')
 
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)

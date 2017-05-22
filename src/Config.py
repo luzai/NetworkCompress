@@ -81,8 +81,11 @@ class MyConfig(object):
         Utils.mkdir_p(self.tf_log_path)
         Utils.mkdir_p(self.output_path)
 
-    def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name'):
+    def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name',evoluation_time=1):
         # TODO check when name = 'default_name'
+        # for ga:
+        self.evaluation_time=evoluation_time
+
         # for single model
         self.set_name(name)
         self.dbg = dbg

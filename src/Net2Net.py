@@ -19,6 +19,32 @@ class Net2Net(object):
         else:
             return model
 
+    def deeper(self,model,config):
+        # select
+        names = [node.name
+                     for node in model.graph.nodes()
+                     if node.type=='Conv2D']
+
+        while True:
+            import random
+            choice=names[random.randint(0,len(names))]
+            next_nodes= model.graph.get_nodes(choice,next_layer=True,last_layer=False)
+            if 'GlobalMaxPooling2D' not in [ node.type for node in next_nodes]:
+                break
+
+        # grow
+        return self.deeper_conv2d(model,choice,config)
+
+
+    def wider(self,model,config):
+        pass
+
+    def add_skip(self,model,config):
+        # TODO selct by using topology sort
+        pass
+
+
+
     def copy_weight(self, before_model, after_model):
 
         _before_model = self.my_model2model(model=before_model)
