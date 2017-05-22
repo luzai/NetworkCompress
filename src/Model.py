@@ -127,7 +127,7 @@ class MyGraph(nx.DiGraph):
                     kernel_size = node.config.get('kernel_size', 3)
                     filters = node.config['filters']
 
-                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='valid')
+                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same')
 
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)
@@ -143,8 +143,14 @@ class MyGraph(nx.DiGraph):
                     # handle shape
                     # Either switch to ROIPooling or MaxPooling
                     # TODO consider ROIPooling
+                    import keras.backend as K
+
+                    if K.image_data_format() == "channels_last":
+                        (width_ind,height_ind,chn_ind)=(1,2,3)
+                    else:
+                        (width_ind, height_ind, chn_ind) = (2,3,1)
                     ori_shapes = [
-                        ktf.int_shape(layer_input_tensor)[2:] for layer_input_tensor in layer_input_tensors
+                        ktf.int_shape(layer_input_tensor)[width_ind:height_ind+1] for layer_input_tensor in layer_input_tensors
                     ]
                     ori_shapes = np.array(ori_shapes)
                     new_shape = ori_shapes.min(axis=0)
@@ -156,7 +162,7 @@ class MyGraph(nx.DiGraph):
                             layer_input_tensors[ind] = \
                                 keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(layer_input_tensor)
 
-                    layer = keras.layers.Concatenate(axis=1)
+                    layer = keras.layers.Concatenate(axis=chn_ind)
                 layer_output_tensor = layer(layer_input_tensors)
 
             graph_helper.add_node(node, layer=layer)
@@ -169,7 +175,11 @@ class MyGraph(nx.DiGraph):
         assert tf.get_default_graph() == Config.MyConfig.tf_graph, "should be same"
         # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
         assert 'output_tensor' in locals()
-        return Model(inputs=input_tensor, outputs=output_tensor)
+        import time
+        tic=time.time()
+        model =Model(inputs=input_tensor, outputs=output_tensor)
+        Config.logger.info('Consume Time(Just Build model: {}'.format(time.time()-tic))
+        return model
 
     # Decrypted
     # @staticmethod
@@ -225,6 +235,9 @@ class MyModel(object):
                            metrics=['accuracy'])
 
     def fit(self):
+        import time
+        tic=time.time()
+
         self.model.fit(self.config.dataset['train_x'],
                        self.config.dataset['train_y'],
                        # validation_split=0.2,
@@ -234,6 +247,7 @@ class MyModel(object):
                        callbacks=[self.config.lr_reducer, self.config.early_stopper, self.config.csv_logger,
                                   TensorBoard(log_dir=self.config.tf_log_path)]
                        )
+        Config.logger.info("Fit model Consume {}:".format(time.time()-tic))
 
     def evaluate(self):
         score = self.model.evaluate(self.config.dataset['test_x'],
@@ -258,7 +272,7 @@ class MyModel(object):
 
 if __name__ == "__main__":
 
-    dbg = True
+    dbg = False
     if dbg:
         config = MyConfig(epochs=0, verbose=1, dbg=dbg, name='model_test')
     else:

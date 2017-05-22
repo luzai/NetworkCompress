@@ -1,4 +1,5 @@
 # !/usr/bin/env python
+# Dependence: Model,Config
 from __future__ import division
 from __future__ import print_function
 
@@ -89,7 +90,7 @@ class Net2Net(object):
         logger.debug(new_graph.to_json())
 
         # construc model
-        new_model = MyModel(config=model.config, graph=new_graph)
+        new_model = MyModel(config=config, graph=new_graph)
 
         # inherit weight
         w_conv1, b_conv1 = new_model.get_layers(layer_name)[0].get_weights()
@@ -119,45 +120,62 @@ class Net2Net(object):
 
     @staticmethod
     def _wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init, help=None):
-        assert teacher_w1.shape[3] == teacher_w2.shape[2], (
+
+        import keras.backend as K
+        from keras.utils.conv_utils import convert_kernel
+        if K.image_data_format()=="channels_last":
+            _teacher_w1=convert_kernel(teacher_w1)
+
+            _teacher_w2=convert_kernel(teacher_w2)
+        else:
+            _teacher_w1 = teacher_w1
+
+            _teacher_w2 = teacher_w2
+        _teacher_b1 = teacher_b1
+        assert _teacher_w1.shape[3] == _teacher_w2.shape[2], (
             'successive layers from teacher model should have compatible shapes')
-        assert teacher_w1.shape[3] == teacher_b1.shape[0], (
+        assert _teacher_w1.shape[3] == _teacher_b1.shape[0], (
             'weight and bias from same layer should have compatible shapes')
-        assert new_width > teacher_w1.shape[3], (
+        assert new_width > _teacher_w1.shape[3], (
             'new width (filters) should be bigger than the existing one')
 
-        n = new_width - teacher_w1.shape[3]
+        n = new_width - _teacher_w1.shape[3]
         if init == 'random-pad':
-            new_w1 = np.random.normal(0, 0.1, size=teacher_w1.shape[:-1] + (n,))
+            new_w1 = np.random.normal(0, 0.1, size=_teacher_w1.shape[:-1] + (n,))
             new_b1 = np.ones(n) * 0.1
-            new_w2 = np.random.normal(0, 0.1, size=teacher_w2.shape[:2] + (
-                n, teacher_w2.shape[3]))
+            new_w2 = np.random.normal(0, 0.1, size=_teacher_w2.shape[:2] + (
+                n, _teacher_w2.shape[3]))
         elif init == 'net2wider':
-            index = np.random.randint(teacher_w1.shape[3], size=n)
+            index = np.random.randint(_teacher_w1.shape[3], size=n)
             factors = np.bincount(index)[index] + 1.
-            new_w1 = teacher_w1[:, :, :, index]
-            new_b1 = teacher_b1[index]
-            new_w2 = teacher_w2[:, :, index, :] / factors.reshape((1, 1, -1, 1))
+            new_w1 = _teacher_w1[:, :, :, index]
+            new_b1 = _teacher_b1[index]
+            new_w2 = _teacher_w2[:, :, index, :] / factors.reshape((1, 1, -1, 1))
         else:
             raise ValueError('Unsupported weight initializer: %s' % init)
 
-        student_w1 = np.concatenate((teacher_w1, new_w1), axis=3)
+        student_w1 = np.concatenate((_teacher_w1, new_w1), axis=3)
         if init == 'random-pad':
-            student_w2 = np.concatenate((teacher_w2, new_w2), axis=2)
+            student_w2 = np.concatenate((_teacher_w2, new_w2), axis=2)
         elif init == 'net2wider':
             # add small noise to break symmetry, so that student model will have
             # full capacity later
             noise = np.random.normal(0, 5e-2 * new_w2.std(), size=new_w2.shape)
-            student_w2 = np.concatenate((teacher_w2, new_w2 + noise), axis=2)
+            student_w2 = np.concatenate((_teacher_w2, new_w2 + noise), axis=2)
             student_w2[:, :, index, :] = new_w2
-        student_b1 = np.concatenate((teacher_b1, new_b1), axis=0)
+        student_b1 = np.concatenate((_teacher_b1, new_b1), axis=0)
+
+        if K.image_data_format()=="channels_last":
+            student_w1=convert_kernel(student_w1)
+            # student_b1=convert_kernel(student_b1)
+            student_w2=convert_kernel(student_w2)
 
         return student_w1, student_b1, student_w2
 
 
 if __name__ == "__main__":
 
-    dbg = True
+    dbg = False
     if dbg:
         config = MyConfig(epochs=0, verbose=2, dbg=dbg, name='before')
     else:
@@ -173,8 +191,10 @@ if __name__ == "__main__":
 
     net2net = Net2Net()
     after_model = net2net.wider_conv2d(before_model, layer_name='Conv2D2', width_ratio=2,config=config.copy('wide'))
-    after_model = net2net.deeper_conv2d(after_model, layer_name='Conv2D2',config=config.copy('depper'))
-    after_model = net2net.skip(after_model, from_name='Conv2D1', to_name='Conv2D2', config=config.copy('skip'))
-
     after_model.comp_fit_eval()
+    after_model = net2net.deeper_conv2d(after_model, layer_name='Conv2D2',config=config.copy('depper'))
+    after_model.comp_fit_eval()
+    after_model = net2net.skip(after_model, from_name='Conv2D1', to_name='Conv2D2', config=config.copy('skip'))
+    after_model.comp_fit_eval()
+
     # from IPython import embed; embed()

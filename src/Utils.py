@@ -22,8 +22,8 @@ from IPython.display import display, HTML, SVG
 
 # TODO map length name to clean ones
 
-def mkdir_p(name):
-    if tf.gfile.Exists(name):
+def mkdir_p(name,delete=True):
+    if delete and tf.gfile.Exists(name):
         tf.gfile.DeleteRecursively(name)
     tf.gfile.MakeDirs(name)
 
@@ -32,10 +32,14 @@ def i_vis_model(model):
     SVG(vis_utils.model_to_dot(model, show_shapes=True).create(prog='dot', format='svg'))
 
 
-def vis_model(model, name='net2net'):
-    _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
-    subprocess.call(_shell_cmd.split())
-    os.chdir(osp.join(root_dir, "output", name))
+def vis_model(model, name='net2net', show_shapes=True):
+    path=osp.dirname(name)
+    name=osp.basename(name)
+    if path =='':
+        path=name
+    mkdir_p(osp.join(root_dir, "output", path),delete=False)
+
+    os.chdir(osp.join(root_dir, "output", path))
     model.save_weights(name + ".h5")
     with open(name + "_model.json", "w") as f:
         json.dump(
@@ -44,36 +48,44 @@ def vis_model(model, name='net2net'):
             indent=2
         )
     try:
-        vis_utils.plot_model(model, to_file=name + '.pdf', show_shapes=True)
-        vis_utils.plot_model(model, to_file=name + '.png', show_shapes=True)
+        vis_utils.plot_model(model, to_file=name + '.pdf', show_shapes=show_shapes)
+        vis_utils.plot_model(model, to_file=name + '.png', show_shapes=show_shapes)
     except Exception as inst:
         print inst
-    os.chdir("../../src")
+    os.chdir(osp.join(root_dir,'src') )
 
-
+import Config
 def vis_graph(graph, name='net2net', show=False):
-    _shell_cmd = "mkdir -p " + osp.join(root_dir, "output", name)
-    subprocess.call(_shell_cmd.split())
-    os.chdir(osp.join(root_dir, "output", name))
+    path = osp.dirname(name)
+    name = osp.basename(name)
+    if path == '':
+        path = name
+    mkdir_p(osp.join(root_dir, "output", path),delete=False)
+
+    os.chdir(osp.join(root_dir, "output", path))
+
+
     with open(name + "_graph.json", "w") as f:
         f.write(graph.to_json())
-
-    plt.close('all')
-    nx.draw(graph, with_labels=True)
-    if show:
-        try:
+    try:
+        plt.close('all')
+        nx.draw(graph, with_labels=True)
+        if show:
             plt.show()
-        except Exception as inst:
-            print inst
-    plt.savefig('graph.png')
-    plt.close('all')
-    os.chdir("../../src")
+        plt.savefig('graph.png')
+        plt.close('all')
+    except Exception as inst:
+         Config.logger.warning(inst)
+    os.chdir(osp.join(root_dir,'src'))
 
-
+import re
 def nvidia_smi():
-    proc = subprocess.Popen(["nvidia-smi"], stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen( "nvidia-smi --query-gpu=index,memory.free --format=csv".split()
+                             , stdout=subprocess.PIPE, shell=True)
     (out, err) = proc.communicate()
-    print "program output:", out
+    res=re.findall(r'\s+(\d+)MiB',out)
+    res=[int(val) for val in res]
+    return res
 
 
 import numpy as np

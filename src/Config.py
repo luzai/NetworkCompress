@@ -54,6 +54,7 @@ logger.addHandler(ch)
 
 class MyConfig(object):
     # for all model
+    # Utils.mkdir_p(osp.join(root_dir,'output/tf_tmp/'))
     tf_graph = tf.get_default_graph()
     _sess_config = tf.ConfigProto(
         allow_soft_placement=True,
@@ -65,7 +66,7 @@ class MyConfig(object):
     # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
     sess = tf.Session(config=_sess_config, graph=tf_graph)
     K.set_session(sess)
-    K.set_image_data_format("channels_first")
+    K.set_image_data_format("channels_last")
     # # for all model, but determined when init the first config
     cache_data = None
 
@@ -81,6 +82,7 @@ class MyConfig(object):
         Utils.mkdir_p(self.output_path)
 
     def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name'):
+        # TODO check when name = 'default_name'
         # for single model
         self.set_name(name)
         self.dbg = dbg
@@ -97,10 +99,10 @@ class MyConfig(object):
         # for all model, but determined when init the first config
         if dbg:
             self.dataset = self.load_data(9999)
-            logger.setLevel(logging.DEBUG)
+            logger.setLevel(logging.WARNING) # TODO modify when release
         else:
             self.dataset = self.load_data(1)
-            logger.setLevel(logging.INFO)
+            logger.setLevel(logging.WARNING)
 
     def _preprocess_input(self, x, mean_image=None):
         x = x.reshape((-1,) + self.input_shape)

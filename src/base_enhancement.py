@@ -230,22 +230,22 @@ def evolution_process(model):
 '''
     use genetic algorithm to grow a convolution model
 '''
-
+import Utils
 #TODO: maintain a model suite with number k
 def genetic_grow_model():
+    Utils.mkdir_p('model_grow/')
     model = make_init_model()
-    model_name = 'inception_model_evolution_0.png' 
-    plot_model(model, to_file = '../output/model_grow/' + model_name, show_layer_names = False)
+    model_name = 'inception_model_evolution_0'
+    Utils.vis_model(model,'model_grow/' + model_name,show_shapes=False)
 
     evolution_time = 100
     
     for i in range(evolution_time):
         model = evolution_process(model)
-        model_name = 'inception_model_evolution_' + str(i) + '.png' 
-        plot_model(model, to_file = '../output/model_grow/' + model_name, show_layer_names = False)
-        model_size = model.count_params() * 4 * 1.0 / 1024 / 1024
-        print ('total params number are %d, size are %f MB\n' % (model.count_params(), model_size))
-
+        model_name = 'inception_model_evolution_' + str(i)
+        print Utils.nvidia_smi()
+        Utils.vis_model(model, name='model_grow/'+model_name, show_shapes=False)
+        print Utils.count_weight(model)
 
 if __name__ == "__main__":
     model = genetic_grow_model()
