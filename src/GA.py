@@ -98,8 +98,15 @@ class GA(object):
 
     def fit_model_process(self):
         # TODO parallel
+        import threading
+        workers=[]
         for model in self.population:
             model.comp_fit_eval()
+        #     t=threading.Thread(target=model.comp_fit_eval)
+        #     t.start()
+        #     workers.append(t)
+        # for t in workers:
+        #     t.join()
 
     def genetic_grow_model(self):
         Utils.mkdir_p('ga/')
@@ -110,8 +117,11 @@ class GA(object):
         # TODO parallel
         for i in range(gl_config.evoluation_time):
             Config.logger.info("Now {} individual ".format(i))
-            self.fit_model_process()
+
             self.evolution_process()
+            self.select_process()
+            self.fit_model_process()
+            # exit(0)
             self.select_process()
 
     def select_process(self):
@@ -122,7 +132,7 @@ class GA(object):
 if __name__ == "__main__":
     dbg = True
     if dbg:
-        gl_config = MyConfig(epochs=0, verbose=2, dbg=dbg, name='ga', evoluation_time=5)
+        gl_config = MyConfig(epochs=1, verbose=2, dbg=dbg, name='ga', evoluation_time=5)
     else:
         gl_config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='ga', evoluation_time=100)
 

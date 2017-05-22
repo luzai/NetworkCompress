@@ -104,86 +104,90 @@ class MyGraph(nx.DiGraph):
         self.add_edge(node, new_node)
         self.add_edge(new_node, next_node)
 
-    def to_model(self, input_shape):
-        graph_helper = self.copy()
+    def to_model(self, input_shape, graph, name="default_for_op"):
+        with graph.as_default():
+            with tf.name_scope(name) as scope:
 
-        assert nx.is_directed_acyclic_graph(graph_helper)
-        topo_nodes = nx.topological_sort(graph_helper)
+                graph_helper = self.copy()
 
-        input_tensor = Input(shape=input_shape)
+                assert nx.is_directed_acyclic_graph(graph_helper)
+                topo_nodes = nx.topological_sort(graph_helper)
 
-        for node in topo_nodes:
-            pre_nodes = graph_helper.predecessors(node)
-            suc_nodes = graph_helper.successors(node)
+                input_tensor = Input(shape=input_shape)
 
-            if node.type not in ['Concatenate', 'Add', 'Multiply']:
-                if len(pre_nodes) == 0:
-                    layer_input_tensor = input_tensor
-                else:
-                    assert len(pre_nodes) == 1
-                    layer_input_tensor = graph_helper[pre_nodes[0]][node]['tensor']
+                for node in topo_nodes:
+                    pre_nodes = graph_helper.predecessors(node)
+                    suc_nodes = graph_helper.successors(node)
 
-                if node.type == 'Conv2D':
-                    kernel_size = node.config.get('kernel_size', 3)
-                    filters = node.config['filters']
+                    if node.type not in ['Concatenate', 'Add', 'Multiply']:
+                        if len(pre_nodes) == 0:
+                            layer_input_tensor = input_tensor
+                        else:
+                            assert len(pre_nodes) == 1
+                            layer_input_tensor = graph_helper[pre_nodes[0]][node]['tensor']
 
-                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
-                                   activation='relu')
+                        if node.type == 'Conv2D':
+                            kernel_size = node.config.get('kernel_size', 3)
+                            filters = node.config['filters']
 
-                elif node.type == 'GlobalMaxPooling2D':
-                    layer = keras.layers.GlobalMaxPooling2D(name=node.name)
-                elif node.type == 'MaxPooling2D':
-                    layer = keras.layers.MaxPooling2D(name=node.name)
-                elif node.type == 'AveragePooling2D':
-                    layer = keras.layers.AveragePooling2D(name=node.name)
-                elif node.type == 'Activation':
-                    activation_type = node.config['activation_type']
-                    layer = Activation(activation=activation_type, name=node.name)
-                layer_output_tensor = layer(layer_input_tensor)
-            else:
-                # TODO Add
-                layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
-                if node.type == 'Concatenate':
-                    # handle shape
-                    # Either switch to ROIPooling or MaxPooling
-                    # TODO consider ROIPooling
-                    import keras.backend as K
+                            layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
+                                           activation='relu')
 
-                    if K.image_data_format() == "channels_last":
-                        (width_ind, height_ind, chn_ind) = (1, 2, 3)
+                        elif node.type == 'GlobalMaxPooling2D':
+                            layer = keras.layers.GlobalMaxPooling2D(name=node.name)
+                        elif node.type == 'MaxPooling2D':
+                            layer = keras.layers.MaxPooling2D(name=node.name)
+                        elif node.type == 'AveragePooling2D':
+                            layer = keras.layers.AveragePooling2D(name=node.name)
+                        elif node.type == 'Activation':
+                            activation_type = node.config['activation_type']
+                            layer = Activation(activation=activation_type, name=node.name)
+                        layer_output_tensor = layer(layer_input_tensor)
                     else:
-                        (width_ind, height_ind, chn_ind) = (2, 3, 1)
-                    ori_shapes = [
-                        ktf.int_shape(layer_input_tensor)[width_ind:height_ind + 1] for layer_input_tensor in
-                        layer_input_tensors
-                    ]
-                    ori_shapes = np.array(ori_shapes)
-                    new_shape = ori_shapes.min(axis=0)
-                    for ind, layer_input_tensor, ori_shape in \
-                            zip(range(len(layer_input_tensors)), layer_input_tensors, ori_shapes):
-                        diff_shape = ori_shape - new_shape
-                        if diff_shape.all():
-                            diff_shape += 1
-                            layer_input_tensors[ind] = \
-                                keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(layer_input_tensor)
+                        # TODO Add
+                        layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
+                        if node.type == 'Concatenate':
+                            # handle shape
+                            # Either switch to ROIPooling or MaxPooling
+                            # TODO consider ROIPooling
+                            import keras.backend as K
 
-                    layer = keras.layers.Concatenate(axis=chn_ind)
-                layer_output_tensor = layer(layer_input_tensors)
+                            if K.image_data_format() == "channels_last":
+                                (width_ind, height_ind, chn_ind) = (1, 2, 3)
+                            else:
+                                (width_ind, height_ind, chn_ind) = (2, 3, 1)
+                            ori_shapes = [
+                                ktf.int_shape(layer_input_tensor)[width_ind:height_ind + 1] for layer_input_tensor in
+                                layer_input_tensors
+                            ]
+                            ori_shapes = np.array(ori_shapes)
+                            new_shape = ori_shapes.min(axis=0)
+                            for ind, layer_input_tensor, ori_shape in \
+                                    zip(range(len(layer_input_tensors)), layer_input_tensors, ori_shapes):
+                                diff_shape = ori_shape - new_shape
+                                if diff_shape.all():
+                                    diff_shape += 1
+                                    layer_input_tensors[ind] = \
+                                        keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(layer_input_tensor)
 
-            graph_helper.add_node(node, layer=layer)
+                            layer = keras.layers.Concatenate(axis=chn_ind)
+                        layer_output_tensor = layer(layer_input_tensors)
 
-            if len(suc_nodes) == 0:
-                output_tensor = layer_output_tensor
-            else:
-                for suc_node in suc_nodes:
-                    graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
-        assert tf.get_default_graph() == Config.MyConfig.tf_graph, "should be same"
-        # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
-        assert 'output_tensor' in locals()
-        import time
-        tic = time.time()
-        model = Model(inputs=input_tensor, outputs=output_tensor)
-        Config.logger.info('Consume Time(Just Build model: {}'.format(time.time() - tic))
+                    graph_helper.add_node(node, layer=layer)
+
+                    if len(suc_nodes) == 0:
+                        output_tensor = layer_output_tensor
+                    else:
+                        for suc_node in suc_nodes:
+                            graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
+                assert tf.get_default_graph() == Config.MyConfig.tf_graph, "should be same"
+                # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
+                assert 'output_tensor' in locals()
+                import time
+                tic = time.time()
+                model = Model(inputs=input_tensor, outputs=output_tensor)
+                Config.logger.info('Consume Time(Just Build model: {}'.format(time.time() - tic))
+
         return model
 
     def to_json(self):
@@ -201,7 +205,8 @@ class MyModel(object):
     def __init__(self, config, graph):
         self.config = config
         self.graph = graph
-        self.model = self.graph.to_model(self.config.input_shape)
+        self.model = self.graph.to_model(self.config.input_shape, graph=self.config.tf_graph,
+                                         name=self.config.name)
 
     def get_layers(self, name, next_layer=False, last_layer=False):
         name2layer = {layer.name: layer for layer in self.model.layers}
@@ -241,18 +246,26 @@ class MyModel(object):
         return score
 
     def comp_fit_eval(self):
-        self.compile()
-        Utils.vis_model(self.model, self.config.name)
-        Utils.vis_graph(self.graph, self.config.name, show=False)  # self.config.dbg
-        self.model.summary()
-        trainable_count, non_trainable_count = Utils.count_weight(self.model)
-        Config.logger.info(
-            "trainable weight {} MB, non trainable_weight {} MB".format(trainable_count, non_trainable_count))
+        with self.config.sess.as_default():
+            with self.config.tf_graph.as_default():
+                assert tf.get_default_graph() is self.config.tf_graph,"graph same"
+            # with tf.Session(graph=self.config.tf_graph, config=self.config._sess_config):
+                with tf.name_scope(self.config.name) as scope:
+                    self.compile()
+                    # self.fit_finished=False
+                    Utils.vis_model(self.model, self.config.name)
+                    Utils.vis_graph(self.graph, self.config.name, show=False)  # self.config.dbg
+                    self.model.summary()
+                    trainable_count, non_trainable_count = Utils.count_weight(self.model)
+                    Config.logger.info(
+                        "trainable weight {} MB, non trainable_weight {} MB".format(trainable_count, non_trainable_count))
 
-        self.fit()
-        score = self.evaluate()
-        print('\n-- loss and accuracy --\n')
-        print(score)
+                    self.fit()
+
+                    score = self.evaluate()
+                    print('\n-- loss and accuracy --\n')
+                    print(score)
+                    # self.fit_finished=True
 
 
 if __name__ == "__main__":

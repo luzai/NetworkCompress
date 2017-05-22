@@ -102,10 +102,10 @@ class MyConfig(object):
         # for all model, but determined when init the first config
         if dbg:
             self.dataset = self.load_data(9999)
-            logger.setLevel(logging.WARNING) # TODO modify when release
+            logger.setLevel(logging.INFO) # TODO modify when release
         else:
             self.dataset = self.load_data(1)
-            logger.setLevel(logging.WARNING)
+            logger.setLevel(logging.INFO)
 
     def _preprocess_input(self, x, mean_image=None):
         x = x.reshape((-1,) + self.input_shape)
