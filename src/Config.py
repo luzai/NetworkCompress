@@ -55,31 +55,23 @@ logger.addHandler(ch)
 class MyConfig(object):
     # for all model
     # Utils.mkdir_p(osp.join(root_dir,'output/tf_tmp/'))
-
+    tf_graph = tf.get_default_graph()
+    _sess_config = tf.ConfigProto(
+        allow_soft_placement=True,
+        # log_device_placement = True,
+        # inter_op_parallelism_threads = 8,
+        # intra_op_parallelism_threads = 8
+    )
+    _sess_config.gpu_options.allow_growth = True
+    # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
+    sess = tf.Session(config=_sess_config, graph=tf_graph)
+    K.set_session(sess)
+    K.set_image_data_format("channels_last")
+    # # for all model, but determined when init the first config
     cache_data = None
-    first_time=True
-
-    def reset_graph(self):
-        # be careful to use this method
-        tf.reset_default_graph()
-        self.tf_graph = tf.get_default_graph()
-        _sess_config = tf.ConfigProto(
-            allow_soft_placement=True,
-            # log_device_placement = True,
-            # inter_op_parallelism_threads = 8,
-            # intra_op_parallelism_threads = 8
-        )
-        _sess_config.gpu_options.allow_growth = True
-        # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
-        self.sess = tf.Session(config=_sess_config, graph=self.tf_graph)
-        K.set_session(self.sess)
-        K.set_image_data_format("channels_last")
-        # # for all model, but determined when init the first config
 
     def copy(self, name='diff_name'):
         new_config = MyConfig(self.epochs, self.verbose, self.dbg, name)
-        new_config.tf_graph=self.tf_graph
-        new_config.sess=self.sess
         return new_config
 
     def set_name(self, name):
@@ -90,9 +82,7 @@ class MyConfig(object):
         Utils.mkdir_p(self.output_path)
 
     def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name', evoluation_time=1):
-        if MyConfig.first_time:
-            self.reset_graph()
-
+        # TODO check when name = 'default_name'
         # for ga:
         self.evoluation_time = evoluation_time
 
@@ -116,7 +106,6 @@ class MyConfig(object):
         else:
             self.dataset = self.load_data(1)
             logger.setLevel(logging.INFO)
-        MyConfig.first_time=False
 
     def _preprocess_input(self, x, mean_image=None):
         x = x.reshape((-1,) + self.input_shape)
@@ -136,7 +125,7 @@ class MyConfig(object):
         return x[:int(x.shape[0] / div), ...]
 
     def load_data(self, limit_data):
-        if MyConfig.cache_data is None and MyConfig.first_time:
+        if MyConfig.cache_data is None:
             (train_x, train_y), (test_x, test_y) = cifar10.load_data()
             train_x, mean_img = self._preprocess_input(train_x, None)
             test_x, _ = self._preprocess_input(test_x, mean_img)

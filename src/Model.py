@@ -46,6 +46,162 @@ class CustomTypeEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
+def _slice_arrays(arrays, start=None, stop=None):
+    """Slice an array or list of arrays.
+
+    This takes an array-like, or a list of
+    array-likes, and outputs:
+        - arrays[start:stop] if `arrays` is an array-like
+        - [x[start:stop] for x in arrays] if `arrays` is a list
+
+    Can also work on list/array of indices: `_slice_arrays(x, indices)`
+
+    # Arguments
+        arrays: Single array or list of arrays.
+        start: can be an integer index (start index)
+            or a list/array of indices
+        stop: integer (stop index); should be None if
+            `start` was a list.
+
+    # Returns
+        A slice of the array(s).
+    """
+    if isinstance(arrays, list):
+        if hasattr(start, '__len__'):
+            # hdf5 datasets only support list objects as indices
+            if hasattr(start, 'shape'):
+                start = start.tolist()
+            return [x[start] for x in arrays]
+        else:
+            return [x[start:stop] for x in arrays]
+    else:
+        if hasattr(start, '__len__'):
+            if hasattr(start, 'shape'):
+                start = start.tolist()
+            return arrays[start]
+        else:
+            return arrays[start:stop]
+
+
+class CustomKerasModel(keras.models.Model):
+    def __init__(self):
+        super(CustomKerasModel, self).__init__()
+        self.cache = {}
+
+    def prepare_fit(self, x=None,
+                    y=None,
+                    batch_size=32,
+                    epochs=1,
+                    verbose=1,
+                    callbacks=None,
+                    validation_split=0.,
+                    validation_data=None,
+                    shuffle=True,
+                    class_weight=None,
+                    sample_weight=None,
+                    initial_epoch=0,
+                    **kwargs):
+        from keras.engine.training import *
+        # Legacy support
+        if 'nb_epoch' in kwargs:
+            warnings.warn('The `nb_epoch` argument in `fit` '
+                          'has been renamed `epochs`.', stacklevel=2)
+            epochs = kwargs.pop('nb_epoch')
+        if kwargs:
+            raise TypeError('Unrecognized keyword arguments: ' + str(kwargs))
+
+        # Validate user data.
+        x, y, sample_weights = self._standardize_user_data(
+            x, y,
+            sample_weight=sample_weight,
+            class_weight=class_weight,
+            check_batch_axis=False,
+            batch_size=batch_size)
+        # Prepare validation data.
+        if validation_data:
+            do_validation = True
+            if len(validation_data) == 2:
+                val_x, val_y = validation_data
+                val_sample_weight = None
+            elif len(validation_data) == 3:
+                val_x, val_y, val_sample_weight = validation_data
+            else:
+                raise ValueError('When passing validation_data, '
+                                 'it must contain 2 (x_val, y_val) '
+                                 'or 3 (x_val, y_val, val_sample_weights) '
+                                 'items, however it contains %d items' %
+                                 len(validation_data))
+
+            val_x, val_y, val_sample_weights = self._standardize_user_data(
+                val_x, val_y,
+                sample_weight=val_sample_weight,
+                check_batch_axis=False,
+                batch_size=batch_size)
+            self._make_test_function()
+            val_f = self.test_function
+            if self.uses_learning_phase and not isinstance(K.learning_phase(), int):
+                val_ins = val_x + val_y + val_sample_weights + [0.]
+            else:
+                val_ins = val_x + val_y + val_sample_weights
+
+        elif validation_split and 0. < validation_split < 1.:
+            do_validation = True
+            split_at = int(len(x[0]) * (1. - validation_split))
+            x, val_x = (_slice_arrays(x, 0, split_at), _slice_arrays(x, split_at))
+            y, val_y = (_slice_arrays(y, 0, split_at), _slice_arrays(y, split_at))
+            sample_weights, val_sample_weights = (
+                _slice_arrays(sample_weights, 0, split_at),
+                _slice_arrays(sample_weights, split_at))
+            self._make_test_function()
+            val_f = self.test_function
+            if self.uses_learning_phase and not isinstance(K.learning_phase(), int):
+                val_ins = val_x + val_y + val_sample_weights + [0.]
+            else:
+                val_ins = val_x + val_y + val_sample_weights
+        else:
+            do_validation = False
+            val_f = None
+            val_ins = None
+
+        # Prepare input arrays and training function.
+        if self.uses_learning_phase and not isinstance(K.learning_phase(), int):
+            ins = x + y + sample_weights + [1.]
+        else:
+            ins = x + y + sample_weights
+        self._make_train_function()
+        f = self.train_function
+
+        # Prepare display labels.
+        out_labels = self._get_deduped_metrics_names()
+
+        if do_validation:
+            callback_metrics = copy.copy(out_labels) + ['val_' + n for n in out_labels]
+        else:
+            callback_metrics = copy.copy(out_labels)
+
+        return dict(f=f, ins=ins, out_labels=out_labels,
+                    batch_size=batch_size, epochs=epochs,
+                    verbose=verbose, callbacks=callbacks,
+                    val_f=val_f, val_ins=val_ins, shuffle=shuffle,
+                    callback_metrics=callback_metrics,
+                    initial_epoch=initial_epoch)
+
+    def fit(self, x=None,
+            y=None,
+            batch_size=32,
+            epochs=1,
+            verbose=1,
+            callbacks=None,
+            validation_split=0.,
+            validation_data=None,
+            shuffle=True,
+            class_weight=None,
+            sample_weight=None,
+            initial_epoch=0,
+            **kwargs):
+        return self._fit_loop(**self.cache)
+
+
 class MyGraph(nx.DiGraph):
     def __init__(self, model_l=None):
         super(MyGraph, self).__init__()
@@ -180,7 +336,7 @@ class MyGraph(nx.DiGraph):
                     else:
                         for suc_node in suc_nodes:
                             graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
-                assert tf.get_default_graph() ==graph, "should be same"
+                assert tf.get_default_graph() == graph, "should be same"
                 # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
                 assert 'output_tensor' in locals()
                 import time
@@ -246,26 +402,27 @@ class MyModel(object):
         return score
 
     def comp_fit_eval(self):
+        with graph.as_default():
+            assert tf.get_default_graph() is self.config.tf_graph, "graph same"
+            with tf.name_scope(self.config.name) as scope:
+                self.compile()
+
+                # self.fit_finished=False
+                Utils.vis_model(self.model, self.config.name)
+                Utils.vis_graph(self.graph, self.config.name, show=False)  # self.config.dbg
+                self.model.summary()
+                trainable_count, non_trainable_count = Utils.count_weight(self.model)
+                Config.logger.info(
+                    "trainable weight {} MB, non trainable_weight {} MB".format(trainable_count, non_trainable_count))
+
         with self.config.sess.as_default():
-            with self.config.tf_graph.as_default():
-                assert tf.get_default_graph() is self.config.tf_graph,"graph same"
-                # with tf.Session(graph=self.config.tf_graph, config=self.config._sess_config):
-                with tf.name_scope(self.config.name) as scope:
-                    self.compile()
-                    # self.fit_finished=False
-                    Utils.vis_model(self.model, self.config.name)
-                    Utils.vis_graph(self.graph, self.config.name, show=False)  # self.config.dbg
-                    self.model.summary()
-                    trainable_count, non_trainable_count = Utils.count_weight(self.model)
-                    Config.logger.info(
-                        "trainable weight {} MB, non trainable_weight {} MB".format(trainable_count, non_trainable_count))
+            assert tf.get_default_graph() is self.config.tf_graph, "graph same"
+            with tf.name_scope(self.config.name) as scope:
+                self.fit()
 
-                    self.fit()
-
-                    score = self.evaluate()
-                    print('\n-- loss and accuracy --\n')
-                    print(score)
-                    # self.fit_finished=True
+                # score = self.evaluate()
+                # print('\n-- loss and accuracy --\n')
+                # print(score)
 
 
 if __name__ == "__main__":
