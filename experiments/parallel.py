@@ -151,12 +151,12 @@ import keras
 import tensorflow as tf
 from keras import backend as K
 from keras.datasets import mnist
-from keras.layers import Conv2D, MaxPooling2D
+from keras.layers import Conv2D, MaxPooling2D, Dropout
 from keras.layers import Dense, Flatten
 
 batch_size = 128
 num_classes = 10
-epochs = 1
+epochs = 10
 
 # input image dimensions
 img_rows, img_cols = 28, 28
@@ -186,8 +186,18 @@ y_train = keras.utils.to_categorical(y_train, num_classes)
 y_test = keras.utils.to_categorical(y_test, num_classes)
 
 
+def _limit_data(x, div):
+    div = float(div)
+    return x[:int(x.shape[0] / div), ...]
+
+
+dbg = False
+if dbg:
+    x_train, y_train, x_test, y_test = map(lambda x: _limit_data(x, 999 // 3), [x_train, y_train, x_test, y_test])
+
+
 class ExampleModel(object):
-    def __init__(self, graph):
+    def __init__(self, graph, name='default'):
         with graph.as_default():
             #             with sess.as_default():
             #                 self.w = tf.Variable(tf.constant(1, shape=[1, 2]))
@@ -200,10 +210,10 @@ class ExampleModel(object):
                        input_shape=input_shape)(x)
             x = Conv2D(64, (3, 3), activation='relu')(x)
             x = MaxPooling2D(pool_size=(2, 2))(x)
-            # self.model.add(Dropout(0.25))
+            x = Dropout(0.25)(x)
             x = Flatten()(x)
             x = Dense(128, activation='relu')(x)
-            # self.model.add(Dropout(0.5))
+            x = Dropout(0.5)(x)
             x = Dense(num_classes)(x)
             self.model = CustomKerasModel(inputs=keras_in, outputs=x)
             self.model._make_predict_function()
@@ -216,18 +226,19 @@ class ExampleModel(object):
                                    batch_size=batch_size,
                                    epochs=epochs,
                                    verbose=2,
-                                   validation_data=(x_test, y_test))
-            # self.m_in = tf.placeholder(tf.float32, shape=(None,) + input_shape)
-            # m_out = self.model(self.m_in)
-            # self.m_gt = tf.placeholder(tf.float32, shape=(None, num_classes))
-            # cross_entropy = tf.reduce_mean(
-            #     tf.nn.softmax_cross_entropy_with_logits(labels=self.m_gt, logits=m_out))
-            # self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
+                                   validation_data=(x_test, y_test),
+                                   callbacks=[keras.callbacks.TensorBoard(log_dir='tmp_tf/' + name + '/')])
+            self.m_in = tf.placeholder(tf.float32, shape=(None,) + input_shape)
+            m_out = self.model(self.m_in)
+            self.m_gt = tf.placeholder(tf.float32, shape=(None, num_classes))
+            self.cross_entropy = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(labels=self.m_gt, logits=m_out))
+            self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(self.cross_entropy)
 
 
 graph = tf.get_default_graph()
 _sess_config = tf.ConfigProto(
-    # allow_soft_placement=True,
+    allow_soft_placement=True,
     # log_device_placement=True,
     # inter_op_parallelism_threads=8,
     # intra_op_parallelism_threads=8
@@ -237,40 +248,59 @@ _sess_config.gpu_options.allow_growth = True
 sess = tf.Session(config=_sess_config, graph=graph)
 
 
-def example(sess, local_network, i):
-    print("worker ", i)
+def example(sess, local_network, woker_id):
+    print("worker ", woker_id)
     with sess.as_default():
         assert sess.graph is graph, 'same '
-        ind = 0
         local_network.model.fit()
-        # while True:
-        #     print("worker ", i, "step ", ind)
-        #     if (ind + 1) * batch_size >= x_train.shape[0]:
-        #         break
-        #     sess.run(local_network.train_step, feed_dict={
-        #         local_network.m_in: x_train[ind * batch_size:(ind + 1) * batch_size, ...],
-        #         local_network.m_gt: y_train[ind * batch_size:(ind + 1) * batch_size, ...]
-        #     })
-        #     ind += 1
+        # for epoch in range(epochs):
+        #     ind = 0
+        #     while True:
+        #         # print("worker ", i, "step ", ind)
+        #         if (ind + 1) * batch_size >= x_train.shape[0]:
+        #
+        #             print('loss',loss)
+        #             break
+        #         _,loss=sess.run([local_network.train_step,local_network.cross_entropy], feed_dict={
+        #             local_network.m_in: x_train[ind * batch_size:(ind + 1) * batch_size, ...],
+        #             local_network.m_gt: y_train[ind * batch_size:(ind + 1) * batch_size, ...]
+        #         })
+        #
+        #         ind += 1
+        #     print("woker ", woker_id, "epoch", epoch)
 
 
-import time, threading
+import time, threading,subprocess
+import multiprocessing as mp
+subprocess.call('rm -rf tmp_tf'.split())
+# parallel = True
+res = []
+for parallel in [True]:
+    # for num in [1, 3, 5, 10, 30]:
+    for num in [1, 2, 5, 10]:
+        threads = []
 
-parallel = False
-threads = []
-tic = time.time()
-for i in range(3):
-    local_network = ExampleModel(graph)
-    sess.run(tf.global_variables_initializer())
+        for i in range(num):
+            local_network = ExampleModel(graph, name='time{}_woker_{}'.format(num, i))
+            # sess = tf.Session(config=_sess_config, graph=graph)
+            sess.run(tf.global_variables_initializer())
 
-    if parallel:
-        t = threading.Thread(target=example, args=(sess, local_network, i))
-        threads.append(t)
-    else:
-        example(sess, local_network, i)
-if parallel:
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-print("consume ", time.time() - tic)
+            if parallel:
+
+                t = threading.Thread(target=example, args=(sess, local_network, i))
+                threads.append(t)
+                # t.start()
+            else:
+                example(sess, local_network, i)
+
+        tic = time.time()
+        if parallel:
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        toc = time.time() - tic
+        res.append(toc)
+        print("consume ", toc)
+
+print(res)

@@ -402,8 +402,9 @@ class MyModel(object):
         return score
 
     def comp_fit_eval(self):
-        with graph.as_default():
-            assert tf.get_default_graph() is self.config.tf_graph, "graph same"
+        # assert tf.get_default_graph() is self.config.tf_graph, "graph same"
+        with self.config.tf_graph.as_default():
+
             with tf.name_scope(self.config.name) as scope:
                 self.compile()
 

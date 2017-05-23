@@ -104,16 +104,17 @@ class GA(object):
         workers = []
         for model in self.population:
             # model.comp_fit_eval()
-            t = threading.Thread(target=model.comp_fit_eval)
-            t.start()
-            workers.append(t)
-        for t in workers:
-            t.join()
+            pass
+        #     t = threading.Thread(target=model.comp_fit_eval)
+        #     t.start()
+        #     workers.append(t)
+        # for t in workers:
+        #     t.join()
 
     def genetic_grow_model(self):
         Utils.mkdir_p('output/ga/')
         model_l = self.get_model_list(self.make_init_model())
-        self.gl_config.reset_graph()
+        # self.gl_config.reset_graph()
         graph = MyGraph(model_l)
         self.population.append(MyModel(self.gl_config, graph))
         # TODO parallel
@@ -128,13 +129,14 @@ class GA(object):
 
     def select_process(self):
         while len(self.population) > 1:
-            del self.population[0]
+            # del self.population[0]
+            pass
 
 
 if __name__ == "__main__":
     dbg = True
     if dbg:
-        gl_config = MyConfig(epochs=1, verbose=2, dbg=dbg, name='ga', evoluation_time=3)
+        gl_config = MyConfig(epochs=1, verbose=2, dbg=dbg, name='ga', evoluation_time=10)
     else:
         gl_config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='ga', evoluation_time=100)
 

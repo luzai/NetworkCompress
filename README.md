@@ -38,8 +38,8 @@ Contributor: @luzai, @miibotree
 - [ ] skip
     - [ ] DAG and topological sort
 - [ ] Distribute/ parallel Training
-- [ ] Mayavi
-- [ ] Summary at running time
+- [x] Mayavi
+- [x] Summary at running time
 
 - Use kd loss
   - [x] Train(65770): hard label + transfer label; Test(10000): cifar-10 hard label 
