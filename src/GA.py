@@ -14,10 +14,11 @@ from Net2Net import Net2Net
 
 
 class GA(object):
-    def my_model2model(self):
-        raise IOError
+    # def my_model2model(self):
+    #     raise IOError
 
-    def __init__(self):
+    def __init__(self, gl_config):
+        self.gl_config = gl_config
         self.population = []
         self.net2net = Net2Net()
         self.max_ind = 0
@@ -27,7 +28,8 @@ class GA(object):
     '''
 
     def make_init_model(self):
-        input_data = Input(shape=gl_config.input_shape)
+
+        input_data = Input(shape=self.gl_config.input_shape)
 
         init_model_index = random.randint(1, 4)
 
@@ -79,7 +81,7 @@ class GA(object):
 
     def evolution_process(self):
         # TODO single model now population future
-        new_config = gl_config.copy('ga_' + str(self.max_ind))
+        new_config = self.gl_config.copy('ga_' + str(self.max_ind))
         self.max_ind += 1
         before_model = self.population[0]
         evolution_choice_list = ['deeper']  # , 'wider','add_skip']
@@ -99,27 +101,27 @@ class GA(object):
     def fit_model_process(self):
         # TODO parallel
         import threading
-        workers=[]
+        workers = []
         for model in self.population:
-            model.comp_fit_eval()
-        #     t=threading.Thread(target=model.comp_fit_eval)
-        #     t.start()
-        #     workers.append(t)
-        # for t in workers:
-        #     t.join()
+            # model.comp_fit_eval()
+            t = threading.Thread(target=model.comp_fit_eval)
+            t.start()
+            workers.append(t)
+        for t in workers:
+            t.join()
 
     def genetic_grow_model(self):
-        Utils.mkdir_p('ga/')
+        Utils.mkdir_p('output/ga/')
         model_l = self.get_model_list(self.make_init_model())
+        self.gl_config.reset_graph()
         graph = MyGraph(model_l)
-
-        self.population.append(MyModel(gl_config, graph))
+        self.population.append(MyModel(self.gl_config, graph))
         # TODO parallel
-        for i in range(gl_config.evoluation_time):
+        for i in range(self.gl_config.evoluation_time):
             Config.logger.info("Now {} individual ".format(i))
 
             self.evolution_process()
-            self.select_process()
+            # self.select_process()
             self.fit_model_process()
             # exit(0)
             self.select_process()
@@ -132,9 +134,9 @@ class GA(object):
 if __name__ == "__main__":
     dbg = True
     if dbg:
-        gl_config = MyConfig(epochs=1, verbose=2, dbg=dbg, name='ga', evoluation_time=5)
+        gl_config = MyConfig(epochs=1, verbose=2, dbg=dbg, name='ga', evoluation_time=3)
     else:
         gl_config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='ga', evoluation_time=100)
 
-    ga = GA()
+    ga = GA(gl_config=gl_config)
     ga.genetic_grow_model()

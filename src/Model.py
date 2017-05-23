@@ -180,7 +180,7 @@ class MyGraph(nx.DiGraph):
                     else:
                         for suc_node in suc_nodes:
                             graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
-                assert tf.get_default_graph() == Config.MyConfig.tf_graph, "should be same"
+                assert tf.get_default_graph() ==graph, "should be same"
                 # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
                 assert 'output_tensor' in locals()
                 import time
@@ -249,7 +249,7 @@ class MyModel(object):
         with self.config.sess.as_default():
             with self.config.tf_graph.as_default():
                 assert tf.get_default_graph() is self.config.tf_graph,"graph same"
-            # with tf.Session(graph=self.config.tf_graph, config=self.config._sess_config):
+                # with tf.Session(graph=self.config.tf_graph, config=self.config._sess_config):
                 with tf.name_scope(self.config.name) as scope:
                     self.compile()
                     # self.fit_finished=False

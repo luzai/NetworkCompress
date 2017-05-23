@@ -44,7 +44,7 @@ class Net2Net(object):
         # TODO selct by using topology sort
         pass
 
-    def maxpool_by_name(self, model, name,config=MyConfig()):
+    def maxpool_by_name(self, model, name, config):
         new_graph = model.graph.copy()
         node = new_graph.get_nodes(name)[0]
         node1 = new_graph.get_nodes(name, next_layer=True)[0]
@@ -60,11 +60,11 @@ class Net2Net(object):
         new_graph.add_edge(node, new_node)
         new_graph.add_edge(new_node, node1)
         logger.debug(new_graph.to_json())
-        new_model=MyModel(config=config,graph=new_graph)
-        self.copy_weight(model,new_model)
+        new_model = MyModel(config=config, graph=new_graph)
+        self.copy_weight(model, new_model)
         return new_model
 
-    def avepool_by_name(self, model, name,config=MyConfig()):
+    def avepool_by_name(self, model, name, config):
         new_graph = model.graph.copy()
         node = new_graph.get_nodes(name)[0]
         node1 = new_graph.get_nodes(name, next_layer=True)[0]
@@ -80,8 +80,8 @@ class Net2Net(object):
         new_graph.add_edge(node, new_node)
         new_graph.add_edge(new_node, node1)
         logger.debug(new_graph.to_json())
-        new_model=MyModel(config=config,graph=new_graph)
-        self.copy_weight(model,new_model)
+        new_model = MyModel(config=config, graph=new_graph)
+        self.copy_weight(model, new_model)
         return new_model
 
     def copy_weight(self, before_model, after_model):
@@ -97,7 +97,7 @@ class Net2Net(object):
             except Exception as inst:
                 logger.warning("except {}".format(inst))
 
-    def skip(self, model, from_name, to_name, config=MyConfig()):
+    def skip(self, model, from_name, to_name, config):
         # original: node1-> node2 -> node3
         # now: node1  ->  node2 ->  new_node -> node3
         #         -------------------->
@@ -121,13 +121,13 @@ class Net2Net(object):
         self.copy_weight(model, new_model)
 
         # Way 1
-        w,b=new_model.get_layers(node2.name)[0].get_weights()
-        w,b=Net2Net.rand_weight_like(w)
-        new_model.get_layers(node2.name)[0].set_weights((w,b))
+        w, b = new_model.get_layers(node2.name)[0].get_weights()
+        w, b = Net2Net.rand_weight_like(w)
+        new_model.get_layers(node2.name)[0].set_weights((w, b))
 
         return new_model
 
-    def wider_conv2d(self, model, layer_name, width_ratio, config=MyConfig()):
+    def wider_conv2d(self, model, layer_name, width_ratio, config):
         # modify graph
         new_graph = model.graph.copy()
         new_node = new_graph.get_nodes(layer_name)[0]
@@ -151,7 +151,7 @@ class Net2Net(object):
         self.copy_weight(model, new_model)
         return new_model
 
-    def deeper_conv2d(self, model, layer_name, kernel_size=3, filters='same', config=MyConfig()):
+    def deeper_conv2d(self, model, layer_name, config, kernel_size=3, filters='same'):
         # construct graph
         new_graph = model.graph.copy()
 
@@ -187,14 +187,16 @@ class Net2Net(object):
         if K.image_data_format() == "channels_last":
             student_w = convert_kernel(student_w)
         return student_w, student_b
+
     @staticmethod
     def rand_weight_like(weight):
-        assert K.image_data_format()=="channels_last","support channels last, but you are {}".format( K.image_data_format())
-        kw,kh,num_channel, filters = weight.shape
-        kvar=K.truncated_normal((kw,kh,num_channel, filters ), 0, 0.05)
-        w=K.eval(kvar)
-        b=np.zeros((filters,))
-        return w,b
+        assert K.image_data_format() == "channels_last", "support channels last, but you are {}".format(
+            K.image_data_format())
+        kw, kh, num_channel, filters = weight.shape
+        kvar = K.truncated_normal((kw, kh, num_channel, filters), 0, 0.05)
+        w = K.eval(kvar)
+        b = np.zeros((filters,))
+        return w, b
 
     @staticmethod
     def _convert_weight(weight, nw_size):
@@ -266,7 +268,7 @@ if __name__ == "__main__":
         config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='before')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 16}],
                ["Conv2D", 'Conv2D2', {'filters': 64}],
-               ["MaxPooling2D", 'maxpooling2d1',{}],
+               ["MaxPooling2D", 'maxpooling2d1', {}],
                ["Conv2D", 'Conv2D3', {'filters': 10}],
                ['GlobalMaxPooling2D', 'GlobalMaxPooling2D1', {}],
                ['Activation', 'Activation1', {'activation_type': 'softmax'}]]
