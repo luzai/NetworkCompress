@@ -3,7 +3,8 @@ import json
 
 import networkx as nx
 import numpy as np
-from Config import keras, tf
+import keras
+import tensorflow as tf
 from keras.backend import tensorflow_backend as ktf
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Input, Activation
@@ -43,162 +44,6 @@ class CustomTypeEncoder(json.JSONEncoder):
             key = '__%s__' % obj.__class__.__name__
             return {key: obj.__dict__}
         return json.JSONEncoder.default(self, obj)
-
-
-def _slice_arrays(arrays, start=None, stop=None):
-    """Slice an array or list of arrays.
-
-    This takes an array-like, or a list of
-    array-likes, and outputs:
-        - arrays[start:stop] if `arrays` is an array-like
-        - [x[start:stop] for x in arrays] if `arrays` is a list
-
-    Can also work on list/array of indices: `_slice_arrays(x, indices)`
-
-    # Arguments
-        arrays: Single array or list of arrays.
-        start: can be an integer index (start index)
-            or a list/array of indices
-        stop: integer (stop index); should be None if
-            `start` was a list.
-
-    # Returns
-        A slice of the array(s).
-    """
-    if isinstance(arrays, list):
-        if hasattr(start, '__len__'):
-            # hdf5 datasets only support list objects as indices
-            if hasattr(start, 'shape'):
-                start = start.tolist()
-            return [x[start] for x in arrays]
-        else:
-            return [x[start:stop] for x in arrays]
-    else:
-        if hasattr(start, '__len__'):
-            if hasattr(start, 'shape'):
-                start = start.tolist()
-            return arrays[start]
-        else:
-            return arrays[start:stop]
-
-
-class CustomKerasModel(keras.models.Model):
-    def __init__(self):
-        super(CustomKerasModel, self).__init__()
-        self.cache = {}
-
-    def prepare_fit(self, x=None,
-                    y=None,
-                    batch_size=32,
-                    epochs=1,
-                    verbose=1,
-                    callbacks=None,
-                    validation_split=0.,
-                    validation_data=None,
-                    shuffle=True,
-                    class_weight=None,
-                    sample_weight=None,
-                    initial_epoch=0,
-                    **kwargs):
-        from keras.engine.training import *
-        # Legacy support
-        if 'nb_epoch' in kwargs:
-            warnings.warn('The `nb_epoch` argument in `fit` '
-                          'has been renamed `epochs`.', stacklevel=2)
-            epochs = kwargs.pop('nb_epoch')
-        if kwargs:
-            raise TypeError('Unrecognized keyword arguments: ' + str(kwargs))
-
-        # Validate user data.
-        x, y, sample_weights = self._standardize_user_data(
-            x, y,
-            sample_weight=sample_weight,
-            class_weight=class_weight,
-            check_batch_axis=False,
-            batch_size=batch_size)
-        # Prepare validation data.
-        if validation_data:
-            do_validation = True
-            if len(validation_data) == 2:
-                val_x, val_y = validation_data
-                val_sample_weight = None
-            elif len(validation_data) == 3:
-                val_x, val_y, val_sample_weight = validation_data
-            else:
-                raise ValueError('When passing validation_data, '
-                                 'it must contain 2 (x_val, y_val) '
-                                 'or 3 (x_val, y_val, val_sample_weights) '
-                                 'items, however it contains %d items' %
-                                 len(validation_data))
-
-            val_x, val_y, val_sample_weights = self._standardize_user_data(
-                val_x, val_y,
-                sample_weight=val_sample_weight,
-                check_batch_axis=False,
-                batch_size=batch_size)
-            self._make_test_function()
-            val_f = self.test_function
-            if self.uses_learning_phase and not isinstance(K.learning_phase(), int):
-                val_ins = val_x + val_y + val_sample_weights + [0.]
-            else:
-                val_ins = val_x + val_y + val_sample_weights
-
-        elif validation_split and 0. < validation_split < 1.:
-            do_validation = True
-            split_at = int(len(x[0]) * (1. - validation_split))
-            x, val_x = (_slice_arrays(x, 0, split_at), _slice_arrays(x, split_at))
-            y, val_y = (_slice_arrays(y, 0, split_at), _slice_arrays(y, split_at))
-            sample_weights, val_sample_weights = (
-                _slice_arrays(sample_weights, 0, split_at),
-                _slice_arrays(sample_weights, split_at))
-            self._make_test_function()
-            val_f = self.test_function
-            if self.uses_learning_phase and not isinstance(K.learning_phase(), int):
-                val_ins = val_x + val_y + val_sample_weights + [0.]
-            else:
-                val_ins = val_x + val_y + val_sample_weights
-        else:
-            do_validation = False
-            val_f = None
-            val_ins = None
-
-        # Prepare input arrays and training function.
-        if self.uses_learning_phase and not isinstance(K.learning_phase(), int):
-            ins = x + y + sample_weights + [1.]
-        else:
-            ins = x + y + sample_weights
-        self._make_train_function()
-        f = self.train_function
-
-        # Prepare display labels.
-        out_labels = self._get_deduped_metrics_names()
-
-        if do_validation:
-            callback_metrics = copy.copy(out_labels) + ['val_' + n for n in out_labels]
-        else:
-            callback_metrics = copy.copy(out_labels)
-
-        return dict(f=f, ins=ins, out_labels=out_labels,
-                    batch_size=batch_size, epochs=epochs,
-                    verbose=verbose, callbacks=callbacks,
-                    val_f=val_f, val_ins=val_ins, shuffle=shuffle,
-                    callback_metrics=callback_metrics,
-                    initial_epoch=initial_epoch)
-
-    def fit(self, x=None,
-            y=None,
-            batch_size=32,
-            epochs=1,
-            verbose=1,
-            callbacks=None,
-            validation_split=0.,
-            validation_data=None,
-            shuffle=True,
-            class_weight=None,
-            sample_weight=None,
-            initial_epoch=0,
-            **kwargs):
-        return self._fit_loop(**self.cache)
 
 
 class MyGraph(nx.DiGraph):
@@ -260,88 +105,87 @@ class MyGraph(nx.DiGraph):
         self.add_edge(new_node, next_node)
 
     def to_model(self, input_shape, graph, name="default_for_op"):
-        with graph.as_default():
-            with tf.name_scope(name) as scope:
+        # with graph.as_default():
+        #     with tf.name_scope(name) as scope:
+        graph_helper = self.copy()
 
-                graph_helper = self.copy()
+        assert nx.is_directed_acyclic_graph(graph_helper)
+        topo_nodes = nx.topological_sort(graph_helper)
 
-                assert nx.is_directed_acyclic_graph(graph_helper)
-                topo_nodes = nx.topological_sort(graph_helper)
+        input_tensor = Input(shape=input_shape)
 
-                input_tensor = Input(shape=input_shape)
+        for node in topo_nodes:
+            pre_nodes = graph_helper.predecessors(node)
+            suc_nodes = graph_helper.successors(node)
 
-                for node in topo_nodes:
-                    pre_nodes = graph_helper.predecessors(node)
-                    suc_nodes = graph_helper.successors(node)
+            if node.type not in ['Concatenate', 'Add', 'Multiply']:
+                if len(pre_nodes) == 0:
+                    layer_input_tensor = input_tensor
+                else:
+                    assert len(pre_nodes) == 1
+                    layer_input_tensor = graph_helper[pre_nodes[0]][node]['tensor']
 
-                    if node.type not in ['Concatenate', 'Add', 'Multiply']:
-                        if len(pre_nodes) == 0:
-                            layer_input_tensor = input_tensor
-                        else:
-                            assert len(pre_nodes) == 1
-                            layer_input_tensor = graph_helper[pre_nodes[0]][node]['tensor']
+                if node.type == 'Conv2D':
+                    kernel_size = node.config.get('kernel_size', 3)
+                    filters = node.config['filters']
 
-                        if node.type == 'Conv2D':
-                            kernel_size = node.config.get('kernel_size', 3)
-                            filters = node.config['filters']
+                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
+                                   activation='relu')
 
-                            layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
-                                           activation='relu')
+                elif node.type == 'GlobalMaxPooling2D':
+                    layer = keras.layers.GlobalMaxPooling2D(name=node.name)
+                elif node.type == 'MaxPooling2D':
+                    layer = keras.layers.MaxPooling2D(name=node.name)
+                elif node.type == 'AveragePooling2D':
+                    layer = keras.layers.AveragePooling2D(name=node.name)
+                elif node.type == 'Activation':
+                    activation_type = node.config['activation_type']
+                    layer = Activation(activation=activation_type, name=node.name)
+                layer_output_tensor = layer(layer_input_tensor)
+            else:
+                # TODO Add
+                layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
+                if node.type == 'Concatenate':
+                    # handle shape
+                    # Either switch to ROIPooling or MaxPooling
+                    # TODO consider ROIPooling
+                    import keras.backend as K
 
-                        elif node.type == 'GlobalMaxPooling2D':
-                            layer = keras.layers.GlobalMaxPooling2D(name=node.name)
-                        elif node.type == 'MaxPooling2D':
-                            layer = keras.layers.MaxPooling2D(name=node.name)
-                        elif node.type == 'AveragePooling2D':
-                            layer = keras.layers.AveragePooling2D(name=node.name)
-                        elif node.type == 'Activation':
-                            activation_type = node.config['activation_type']
-                            layer = Activation(activation=activation_type, name=node.name)
-                        layer_output_tensor = layer(layer_input_tensor)
+                    if K.image_data_format() == "channels_last":
+                        (width_ind, height_ind, chn_ind) = (1, 2, 3)
                     else:
-                        # TODO Add
-                        layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
-                        if node.type == 'Concatenate':
-                            # handle shape
-                            # Either switch to ROIPooling or MaxPooling
-                            # TODO consider ROIPooling
-                            import keras.backend as K
+                        (width_ind, height_ind, chn_ind) = (2, 3, 1)
+                    ori_shapes = [
+                        ktf.int_shape(layer_input_tensor)[width_ind:height_ind + 1] for layer_input_tensor in
+                        layer_input_tensors
+                    ]
+                    ori_shapes = np.array(ori_shapes)
+                    new_shape = ori_shapes.min(axis=0)
+                    for ind, layer_input_tensor, ori_shape in \
+                            zip(range(len(layer_input_tensors)), layer_input_tensors, ori_shapes):
+                        diff_shape = ori_shape - new_shape
+                        if diff_shape.all():
+                            diff_shape += 1
+                            layer_input_tensors[ind] = \
+                                keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(layer_input_tensor)
 
-                            if K.image_data_format() == "channels_last":
-                                (width_ind, height_ind, chn_ind) = (1, 2, 3)
-                            else:
-                                (width_ind, height_ind, chn_ind) = (2, 3, 1)
-                            ori_shapes = [
-                                ktf.int_shape(layer_input_tensor)[width_ind:height_ind + 1] for layer_input_tensor in
-                                layer_input_tensors
-                            ]
-                            ori_shapes = np.array(ori_shapes)
-                            new_shape = ori_shapes.min(axis=0)
-                            for ind, layer_input_tensor, ori_shape in \
-                                    zip(range(len(layer_input_tensors)), layer_input_tensors, ori_shapes):
-                                diff_shape = ori_shape - new_shape
-                                if diff_shape.all():
-                                    diff_shape += 1
-                                    layer_input_tensors[ind] = \
-                                        keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(layer_input_tensor)
+                    layer = keras.layers.Concatenate(axis=chn_ind)
+                layer_output_tensor = layer(layer_input_tensors)
 
-                            layer = keras.layers.Concatenate(axis=chn_ind)
-                        layer_output_tensor = layer(layer_input_tensors)
+            graph_helper.add_node(node, layer=layer)
 
-                    graph_helper.add_node(node, layer=layer)
-
-                    if len(suc_nodes) == 0:
-                        output_tensor = layer_output_tensor
-                    else:
-                        for suc_node in suc_nodes:
-                            graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
-                assert tf.get_default_graph() == graph, "should be same"
-                # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
-                assert 'output_tensor' in locals()
-                import time
-                tic = time.time()
-                model = Model(inputs=input_tensor, outputs=output_tensor)
-                Config.logger.info('Consume Time(Just Build model: {}'.format(time.time() - tic))
+            if len(suc_nodes) == 0:
+                output_tensor = layer_output_tensor
+            else:
+                for suc_node in suc_nodes:
+                    graph_helper.add_edge(node, suc_node, tensor=layer_output_tensor)
+        # assert tf.get_default_graph() == graph, "should be same"
+        # tf.train.export_meta_graph('tmp.pbtxt', graph_def=tf.get_default_graph().as_graph_def())
+        assert 'output_tensor' in locals()
+        import time
+        tic = time.time()
+        model = Model(inputs=input_tensor, outputs=output_tensor)
+        Config.logger.info('Consume Time(Just Build model: {}'.format(time.time() - tic))
 
         return model
 
@@ -361,8 +205,11 @@ class MyModel(object):
         self.config = config
         if model is None:
             self.graph = graph
-            self.model = self.graph.to_model(self.config.input_shape, graph=self.config.tf_graph,
-                                             name=self.config.name)
+            self.model = self.graph.to_model(
+                self.config.input_shape,
+                # graph=self.config.tf_graph,
+                graph=None,
+                name=self.config.name)
         else:
             self.model = model
 
@@ -390,6 +237,7 @@ class MyModel(object):
                        self.config.dataset['train_y'],
                        # validation_split=0.2,
                        validation_data=(self.config.dataset['test_x'], self.config.dataset['test_y']),
+                       verbose=self.config.verbose,
                        batch_size=self.config.batch_size,
                        epochs=self.config.epochs,
                        callbacks=[self.config.lr_reducer, self.config.early_stopper, self.config.csv_logger,
@@ -413,20 +261,20 @@ class MyModel(object):
 
     def comp_fit_eval(self):
         # assert tf.get_default_graph() is self.config.tf_graph, "graph same"
-        with self.config.tf_graph.as_default():
-            with tf.name_scope(self.config.name):
-                self.compile()
+        # with self.config.tf_graph.as_default():
+        #     with tf.name_scope(self.config.name):
+        self.compile()
 
-        with self.config.sess.as_default():
-            assert tf.get_default_graph() is self.config.tf_graph, "graph same"
-            with tf.name_scope(self.config.name):
-                self.fit()
+        # with self.config.sess.as_default():
+        #     assert tf.get_default_graph() is self.config.tf_graph, "graph same"
+        #     with tf.name_scope(self.config.name):
+        self.fit()
 
-                score = self.evaluate()
-                print('\n-- loss and accuracy --\n')
-                print(score)
+        score = self.evaluate()
+        print('\n-- loss and accuracy --\n')
+        print(score)
 
-                return score[-1]
+        return score[-1]
 
 
 if __name__ == "__main__":

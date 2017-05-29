@@ -1,4 +1,4 @@
-import keras,tensorflow
+import keras, tensorflow
 import json
 import numpy as np
 from keras.layers import Input, Conv2D, GlobalMaxPooling2D, Activation
@@ -83,9 +83,9 @@ class GA(object):
 
     def evolution_process(self):
         self.iter += 1
-        for name,before_model in self.population.items():
+        for name, before_model in self.population.items():
             self.max_ind += 1
-            new_config = self.gl_config.copy('ga_iter_' + str(self.iter) + '_' + str(self.max_ind))
+            new_config = self.gl_config.copy('ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind))
 
             evolution_choice_list = ['deeper']  # , 'wider','add_skip']
             evolution_choice = np.random.choice(evolution_choice_list, 1)[0]
@@ -106,9 +106,8 @@ class GA(object):
         clients = []
         for model in self.population.values():
             # if getattr(model, 'parent', None) is not None:
-                # has parents means muatetion and weight change, so need to save weights
+            # has parents means muatetion and weight change, so need to save weights
             keras.models.save_model(model.model, model.config.model_path)
-
 
             d = dict(
                 queue=self.queue,
@@ -116,14 +115,14 @@ class GA(object):
                 epochs=model.config.epochs,
                 verbose=model.config.verbose
             )
-            c = mp.Process(target=GAClient.run, kwargs=d)
+            c = mp.Process(target=GAClient.run_self, kwargs=d)
             c.start()
             clients.append(c)
         for i in range(len(clients)):
             d = self.queue.get()
             name = d[0]
             score = d[1]
-            setattr( self.population[name],'score',score)
+            setattr(self.population[name], 'score', score)
 
         for c in clients:
             c.join()
@@ -140,14 +139,15 @@ class GA(object):
             self.select_process()
 
     def select_process(self):
-        all_name=self.population.keys()
-        choose_ind=np.random.permutation(len(self.population))[:self.nb_inv]
-        choose_name=all_name[choose_ind]
-        self.population={name:model for name ,model in self.population.items() if name in choose_name}
+        all_name = np.array(self.population.keys())
+        choose_ind = np.random.permutation(len(self.population))[:self.nb_inv].astype('uint8')
+        choose_name = all_name[choose_ind].tolist()
+        self.population = {name: model for name, model in self.population.items() if name in choose_name}
 
         assert len(np.unique(self.population)) == self.nb_inv, 'individual should not be same'
-        for name,model in self.population:
+        for name, model in self.population:
             model.model.load_weight(model.config.model_path)
+
 
 if __name__ == "__main__":
     dbg = True

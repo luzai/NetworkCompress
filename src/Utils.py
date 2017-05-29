@@ -1,4 +1,5 @@
-from Config import tf, keras
+import tensorflow as tf
+import keras
 import json, subprocess, matplotlib
 
 matplotlib.use('TkAgg')
@@ -37,7 +38,7 @@ def vis_model(model, name='net2net', show_shapes=True):
         path = name
     mkdir_p(osp.join(root_dir, "output", path), delete=False)
     os.chdir(osp.join(root_dir, "output", path))
-    keras.models.save_model(name + '.h5', model)
+    keras.models.save_model(model, name + '.h5')
     # with open(name + "_model.json", "w") as f:
     #     json.dump(
     #         json.loads(model.to_json()),

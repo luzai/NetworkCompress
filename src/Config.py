@@ -3,11 +3,11 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-
+import tensorflow as tf
 import keras.utils,keras
 import numpy as np
 import os.path as osp
-import tensorflow as tf
+# import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
