@@ -1,10 +1,9 @@
 # Dependenct: Utils, Config
 import json
 
-import keras
 import networkx as nx
 import numpy as np
-import tensorflow as tf
+from Config import keras, tf
 from keras.backend import tensorflow_backend as ktf
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Input, Activation
@@ -358,11 +357,14 @@ class MyGraph(nx.DiGraph):
 
 
 class MyModel(object):
-    def __init__(self, config, graph):
+    def __init__(self, config, graph=None, model=None):
         self.config = config
-        self.graph = graph
-        self.model = self.graph.to_model(self.config.input_shape, graph=self.config.tf_graph,
-                                         name=self.config.name)
+        if model is None:
+            self.graph = graph
+            self.model = self.graph.to_model(self.config.input_shape, graph=self.config.tf_graph,
+                                             name=self.config.name)
+        else:
+            self.model = model
 
     def get_layers(self, name, next_layer=False, last_layer=False):
         name2layer = {layer.name: layer for layer in self.model.layers}
@@ -401,29 +403,30 @@ class MyModel(object):
                                     batch_size=self.config.batch_size, verbose=self.config.verbose)
         return score
 
+    def vis(self):
+        Utils.vis_model(self.model, self.config.name)
+        Utils.vis_graph(self.graph, self.config.name, show=False)
+        self.model.summary()
+        trainable_count, non_trainable_count = Utils.count_weight(self.model)
+        Config.logger.info(
+            "trainable weight {} MB, non trainable_weight {} MB".format(trainable_count, non_trainable_count))
+
     def comp_fit_eval(self):
         # assert tf.get_default_graph() is self.config.tf_graph, "graph same"
         with self.config.tf_graph.as_default():
-
-            with tf.name_scope(self.config.name) as scope:
+            with tf.name_scope(self.config.name):
                 self.compile()
-
-                # self.fit_finished=False
-                Utils.vis_model(self.model, self.config.name)
-                Utils.vis_graph(self.graph, self.config.name, show=False)  # self.config.dbg
-                self.model.summary()
-                trainable_count, non_trainable_count = Utils.count_weight(self.model)
-                Config.logger.info(
-                    "trainable weight {} MB, non trainable_weight {} MB".format(trainable_count, non_trainable_count))
 
         with self.config.sess.as_default():
             assert tf.get_default_graph() is self.config.tf_graph, "graph same"
-            with tf.name_scope(self.config.name) as scope:
+            with tf.name_scope(self.config.name):
                 self.fit()
 
-                # score = self.evaluate()
-                # print('\n-- loss and accuracy --\n')
-                # print(score)
+                score = self.evaluate()
+                print('\n-- loss and accuracy --\n')
+                print(score)
+
+                return score[-1]
 
 
 if __name__ == "__main__":

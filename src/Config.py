@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import argparse
 
-import keras.utils
+import keras.utils,keras
 import numpy as np
 import os.path as osp
 import tensorflow as tf
@@ -38,7 +38,7 @@ def parse_args():
 
 
 # args=parse_args()
-import logging, sys
+import logging, sys,json
 
 # logging.basicConfig(filename='output/net2net.log', level=logging.DEBUG)
 
@@ -56,38 +56,51 @@ class MyConfig(object):
     # for all model
     # Utils.mkdir_p(osp.join(root_dir,'output/tf_tmp/'))
     tf_graph = tf.get_default_graph()
-    _sess_config = tf.ConfigProto(
-        allow_soft_placement=True,
-        # log_device_placement = True,
-        # inter_op_parallelism_threads = 8,
-        # intra_op_parallelism_threads = 8
-    )
+    _sess_config = tf.ConfigProto(allow_soft_placement=True)
     _sess_config.gpu_options.allow_growth = True
-    # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
     sess = tf.Session(config=_sess_config, graph=tf_graph)
     K.set_session(sess)
     K.set_image_data_format("channels_last")
     # # for all model, but determined when init the first config
     cache_data = None
 
+    def to_json(self):
+        d=dict(name=self.name,
+             epochs=self.epochs,
+             verbose=self.verbose,
+             dbg=self.dbg)
+        with open(osp.join(self.output_path,'config.json')) as f :
+            json.dumps(f,d)
+        return
+
     def copy(self, name='diff_name'):
         new_config = MyConfig(self.epochs, self.verbose, self.dbg, name)
         return new_config
 
-    def set_name(self, name):
+    def set_name(self, name,clean=True):
         self.name = name
         self.tf_log_path = osp.join(root_dir, 'output/tf_tmp/', name)
         self.output_path = osp.join(root_dir, 'output/', name)
-        Utils.mkdir_p(self.tf_log_path)
-        Utils.mkdir_p(self.output_path)
+        self.model_path=osp.join(root_dir,'output/',name,name+'.h5')
+        if clean:
+            Utils.mkdir_p(self.tf_log_path)
+            Utils.mkdir_p(self.output_path)
 
-    def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name', evoluation_time=1):
+    def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name', evoluation_time=1,clean=True):
         # TODO check when name = 'default_name'
+        # for all model
+        # self.tf_graph = tf.get_default_graph()
+        # _sess_config = tf.ConfigProto(allow_soft_placement=True)
+        # _sess_config.gpu_options.allow_growth = True
+        # self.sess = tf.Session(config=_sess_config, graph=self.tf_graph)
+        # K.set_session(self.sess)
+        # K.set_image_data_format("channels_last")
+
         # for ga:
         self.evoluation_time = evoluation_time
 
         # for single model
-        self.set_name(name)
+        self.set_name(name,clean=clean)
         self.dbg = dbg
         self.input_shape = (3, 32, 32) if K.image_data_format() == "Channels_first" else (32, 32, 3)
         self.nb_class = 10

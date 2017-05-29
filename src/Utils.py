@@ -1,15 +1,12 @@
-
-import json
-import subprocess
-
-import matplotlib
+from Config import tf, keras
+import json, subprocess, matplotlib
 
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import networkx as nx
 import os
 import os.path as osp
-import tensorflow as tf
+
 from keras.utils import vis_utils
 
 # from Init import root_dir
@@ -22,7 +19,7 @@ from IPython.display import display, HTML, SVG
 
 # TODO map length name to clean ones
 
-def mkdir_p(name,delete=True):
+def mkdir_p(name, delete=True):
     # TODO it is not good for debug
     if delete and tf.gfile.Exists(name):
         tf.gfile.DeleteRecursively(name)
@@ -34,37 +31,38 @@ def i_vis_model(model):
 
 
 def vis_model(model, name='net2net', show_shapes=True):
-    path=osp.dirname(name)
-    name=osp.basename(name)
-    if path =='':
-        path=name
-    mkdir_p(osp.join(root_dir, "output", path),delete=False)
-
+    path = osp.dirname(name)
+    name = osp.basename(name)
+    if path == '':
+        path = name
+    mkdir_p(osp.join(root_dir, "output", path), delete=False)
     os.chdir(osp.join(root_dir, "output", path))
-    model.save_weights(name + ".h5")
-    with open(name + "_model.json", "w") as f:
-        json.dump(
-            json.loads(model.to_json()),
-            f,
-            indent=2
-        )
+    keras.models.save_model(name + '.h5', model)
+    # with open(name + "_model.json", "w") as f:
+    #     json.dump(
+    #         json.loads(model.to_json()),
+    #         f,
+    #         indent=2
+    #     )
     try:
         vis_utils.plot_model(model, to_file=name + '.pdf', show_shapes=show_shapes)
         vis_utils.plot_model(model, to_file=name + '.png', show_shapes=show_shapes)
     except Exception as inst:
         print inst
-    os.chdir(osp.join(root_dir,'src') )
+    os.chdir(osp.join(root_dir, 'src'))
+
 
 import Config
+
+
 def vis_graph(graph, name='net2net', show=False):
     path = osp.dirname(name)
     name = osp.basename(name)
     if path == '':
         path = name
-    mkdir_p(osp.join(root_dir, "output", path),delete=False)
+    mkdir_p(osp.join(root_dir, "output", path), delete=False)
 
     os.chdir(osp.join(root_dir, "output", path))
-
 
     with open(name + "_graph.json", "w") as f:
         f.write(graph.to_json())
@@ -76,16 +74,19 @@ def vis_graph(graph, name='net2net', show=False):
         plt.savefig('graph.png')
         plt.close('all')
     except Exception as inst:
-         Config.logger.warning(inst)
-    os.chdir(osp.join(root_dir,'src'))
+        Config.logger.warning(inst)
+    os.chdir(osp.join(root_dir, 'src'))
+
 
 import re
+
+
 def nvidia_smi():
-    proc = subprocess.Popen( "nvidia-smi --query-gpu=index,memory.free --format=csv".split()
-                             , stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen("nvidia-smi --query-gpu=index,memory.free --format=csv".split()
+                            , stdout=subprocess.PIPE, shell=True)
     (out, err) = proc.communicate()
-    res=re.findall(r'\s+(\d+)MiB',out)
-    res=[int(val) for val in res]
+    res = re.findall(r'\s+(\d+)MiB', out)
+    res = [int(val) for val in res]
     return res
 
 

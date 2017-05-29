@@ -1,16 +1,15 @@
+import keras,tensorflow
 import json
-import random
-
 import numpy as np
-from keras.layers import Input, Conv2D, GlobalMaxPooling2D
-from keras.layers.core import Activation
+from keras.layers import Input, Conv2D, GlobalMaxPooling2D, Activation
 from keras.models import Model
-
+import multiprocessing as mp
 import Config
 import Utils
 from Config import MyConfig
 from Model import MyModel, MyGraph
 from Net2Net import Net2Net
+import GAClient
 
 
 class GA(object):
@@ -19,9 +18,12 @@ class GA(object):
 
     def __init__(self, gl_config):
         self.gl_config = gl_config
-        self.population = []
+        self.population = {}
         self.net2net = Net2Net()
         self.max_ind = 0
+        self.iter = 0
+        self.nb_inv = 3
+        self.queue = mp.Queue(self.nb_inv)
 
     '''
         define original init model 
@@ -30,7 +32,7 @@ class GA(object):
     def make_init_model(self):
 
         input_data = Input(shape=self.gl_config.input_shape)
-
+        import random
         init_model_index = random.randint(1, 4)
 
         if init_model_index == 1:  # one conv layer with kernel num = 64
@@ -80,58 +82,72 @@ class GA(object):
         return model_list
 
     def evolution_process(self):
-        # TODO single model now population future
-        new_config = self.gl_config.copy('ga_' + str(self.max_ind))
-        self.max_ind += 1
-        before_model = self.population[0]
-        evolution_choice_list = ['deeper']  # , 'wider','add_skip']
-        evolution_choice = evolution_choice_list[np.random.randint(0, len(evolution_choice_list))]
-        print evolution_choice
+        self.iter += 1
+        for name,before_model in self.population.items():
+            self.max_ind += 1
+            new_config = self.gl_config.copy('ga_iter_' + str(self.iter) + '_' + str(self.max_ind))
 
-        if evolution_choice == 'deeper':
-            after_model = self.net2net.deeper(before_model, config=new_config)
-        elif evolution_choice == 'wider':
-            after_model = self.net2net.wider(before_model, config=new_config)
-        elif evolution_choice == 'add_skip':
-            after_model = self.net2net.add_skip(before_model, config=new_config)
-        # TODO interface deep wide + weight copy
-        # TODO single model now population future
-        self.population.append(after_model)
+            evolution_choice_list = ['deeper']  # , 'wider','add_skip']
+            evolution_choice = np.random.choice(evolution_choice_list, 1)[0]
+            print evolution_choice
+
+            if evolution_choice == 'deeper':
+                after_model = self.net2net.deeper(before_model, config=new_config)
+            elif evolution_choice == 'wider':
+                after_model = self.net2net.wider(before_model, config=new_config)
+            elif evolution_choice == 'add_skip':
+                after_model = self.net2net.add_skip(before_model, config=new_config)
+            assert 'after_model' in locals()
+            # TODO interface for deep wide + weight copy
+            setattr(after_model, 'parent', before_model.config.name)
+            self.population[after_model.config.name] = after_model
 
     def fit_model_process(self):
-        # TODO parallel
-        import threading
-        workers = []
-        for model in self.population:
-            # model.comp_fit_eval()
-            pass
-        #     t = threading.Thread(target=model.comp_fit_eval)
-        #     t.start()
-        #     workers.append(t)
-        # for t in workers:
-        #     t.join()
+        clients = []
+        for model in self.population.values():
+            # if getattr(model, 'parent', None) is not None:
+                # has parents means muatetion and weight change, so need to save weights
+            keras.models.save_model(model.model, model.config.model_path)
+
+
+            d = dict(
+                queue=self.queue,
+                name=model.config.name,
+                epochs=model.config.epochs,
+                verbose=model.config.verbose
+            )
+            c = mp.Process(target=GAClient.run, kwargs=d)
+            c.start()
+            clients.append(c)
+        for i in range(len(clients)):
+            d = self.queue.get()
+            name = d[0]
+            score = d[1]
+            setattr( self.population[name],'score',score)
+
+        for c in clients:
+            c.join()
 
     def genetic_grow_model(self):
         Utils.mkdir_p('output/ga/')
         model_l = self.get_model_list(self.make_init_model())
-        # self.gl_config.reset_graph()
         graph = MyGraph(model_l)
-        self.population.append(MyModel(self.gl_config, graph))
-        # TODO parallel
+        self.population[self.gl_config.name] = MyModel(config=self.gl_config, graph=graph)
         for i in range(self.gl_config.evoluation_time):
             Config.logger.info("Now {} individual ".format(i))
-
             self.evolution_process()
-            # self.select_process()
             self.fit_model_process()
-            # exit(0)
             self.select_process()
 
     def select_process(self):
-        while len(self.population) > 1:
-            # del self.population[0]
-            pass
+        all_name=self.population.keys()
+        choose_ind=np.random.permutation(len(self.population))[:self.nb_inv]
+        choose_name=all_name[choose_ind]
+        self.population={name:model for name ,model in self.population.items() if name in choose_name}
 
+        assert len(np.unique(self.population)) == self.nb_inv, 'individual should not be same'
+        for name,model in self.population:
+            model.model.load_weight(model.config.model_path)
 
 if __name__ == "__main__":
     dbg = True
