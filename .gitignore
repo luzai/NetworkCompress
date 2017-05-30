@@ -6,7 +6,8 @@
 *.JPEG
 *.model
 *.png
-!doc/*.png
+!doc/*
+!doc/**/*
 *.log*
 *.json
 *.pdf
