@@ -1,5 +1,5 @@
-import keras, tensorflow
-import json
+import keras, tensorflow, json
+
 import numpy as np
 from keras.layers import Input, Conv2D, GlobalMaxPooling2D, Activation
 from keras.models import Model
@@ -22,7 +22,7 @@ class GA(object):
         self.net2net = Net2Net()
         self.max_ind = 0
         self.iter = 0
-        self.nb_inv = 3
+        self.nb_inv = 3  # 10 later
         self.queue = mp.Queue(self.nb_inv)
 
     '''
@@ -30,6 +30,7 @@ class GA(object):
     '''
 
     def make_init_model(self):
+        models = []
 
         input_data = Input(shape=self.gl_config.input_shape)
         import random
@@ -55,6 +56,7 @@ class GA(object):
         stem_softmax_1 = Activation('softmax', name='activation1')(stem_global_pooling_1)
 
         model = Model(inputs=input_data, outputs=stem_softmax_1)
+
         return model
 
     def get_model_list(self, model):
@@ -81,29 +83,45 @@ class GA(object):
 
         return model_list
 
-    def evolution_process(self):
+    def get_curr_config(self):
+        return self.gl_config.copy('ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind))
+
+    def mutation_process(self):
+        if self.iter != 0:
+            for name, model in self.population.items():
+                model.model.load_weights(model.config.model_path)
+
         self.iter += 1
         for name, before_model in self.population.items():
             self.max_ind += 1
-            new_config = self.gl_config.copy('ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind))
+            new_config = self.get_curr_config()
+            suceeded = False
+            while not suceeded:
+                evolution_choice_list = ['deeper']  # , 'wider','add_skip']
+                evolution_choice = np.random.choice(evolution_choice_list, 1)[0]
+                print evolution_choice
+                try:
+                    if evolution_choice == 'deeper':
+                        after_model = self.net2net.deeper(before_model, config=new_config)
+                        suceeded = True
+                    elif evolution_choice == 'wider':
+                        after_model = self.net2net.wider(before_model, config=new_config)
+                        suceeded = True
+                    elif evolution_choice == 'add_skip':
+                        after_model = self.net2net.add_skip(before_model, config=new_config)
+                        suceeded = True
+                except Exception as inst:
+                    print inst
 
-            evolution_choice_list = ['deeper']  # , 'wider','add_skip']
-            evolution_choice = np.random.choice(evolution_choice_list, 1)[0]
-            print evolution_choice
-
-            if evolution_choice == 'deeper':
-                after_model = self.net2net.deeper(before_model, config=new_config)
-            elif evolution_choice == 'wider':
-                after_model = self.net2net.wider(before_model, config=new_config)
-            elif evolution_choice == 'add_skip':
-                after_model = self.net2net.add_skip(before_model, config=new_config)
             assert 'after_model' in locals()
             # TODO interface for deep wide + weight copy
             setattr(after_model, 'parent', before_model.config.name)
             self.population[after_model.config.name] = after_model
 
-    def fit_model_process(self):
+    def train_process(self):
         clients = []
+        import time
+        time.sleep(np.random.rand()*10)
         for model in self.population.values():
             # if getattr(model, 'parent', None) is not None:
             # has parents means muatetion and weight change, so need to save weights
@@ -113,48 +131,57 @@ class GA(object):
                 queue=self.queue,
                 name=model.config.name,
                 epochs=model.config.epochs,
-                verbose=model.config.verbose
+                verbose=model.config.verbose,
+                limit_data=model.config.limit_data
             )
-            c = mp.Process(target=GAClient.run_self, kwargs=d)
-            c.start()
-            clients.append(c)
-        for i in range(len(clients)):
-            d = self.queue.get()
-            name = d[0]
-            score = d[1]
-            setattr(self.population[name], 'score', score)
+            if not sequential:
+                c = mp.Process(target=GAClient.run_self, kwargs=d)
+                c.start()
+                clients.append(c)
+            else:
+                GAClient.run(**d)
+                d = self.queue.get()
+                name = d[0]
+                score = d[1]
+                setattr(self.population[name], 'score', score)
 
-        for c in clients:
-            c.join()
+        if not sequential:
+            for i in range(len(clients)):
+                d = self.queue.get()
+                name = d[0]
+                score = d[1]
+                setattr(self.population[name], 'score', score)
+            for c in clients:
+                c.join()
 
-    def genetic_grow_model(self):
-        Utils.mkdir_p('output/ga/')
-        model_l = self.get_model_list(self.make_init_model())
-        graph = MyGraph(model_l)
-        self.population[self.gl_config.name] = MyModel(config=self.gl_config, graph=graph)
+    def ga_main(self):
+        # Utils.mkdir_p('output/ga/')
+
+        for i in range(self.nb_inv):
+            model = self.make_init_model()
+            model_l = self.get_model_list(model)
+            graph = MyGraph(model_l)
+            config = self.get_curr_config()
+            self.population[config.name] = MyModel(config=config, graph=graph)
+            self.max_ind += 1
         for i in range(self.gl_config.evoluation_time):
-            Config.logger.info("Now {} individual ".format(i))
-            self.evolution_process()
-            self.fit_model_process()
+            Config.logger.info("Now {} evolution ".format(i))
+            self.mutation_process()
+            self.train_process()
             self.select_process()
 
     def select_process(self):
-        all_name = np.array(self.population.keys())
-        choose_ind = np.random.permutation(len(self.population))[:self.nb_inv].astype('uint8')
-        choose_name = all_name[choose_ind].tolist()
-        self.population = {name: model for name, model in self.population.items() if name in choose_name}
-
-        assert len(np.unique(self.population)) == self.nb_inv, 'individual should not be same'
-        for name, model in self.population:
-            model.model.load_weight(model.config.model_path)
+        for model in self.population.values():
+            assert hasattr(model, 'score'), 'to eval we need score'
+        self.population = Utils.choice_dict(self.population, self.nb_inv)
+        if len(np.unique(self.population.keys())) == self.nb_inv:
+            print "!warning: sample without replacement"
 
 
 if __name__ == "__main__":
-    dbg = True
-    if dbg:
-        gl_config = MyConfig(epochs=1, verbose=2, dbg=dbg, name='ga', evoluation_time=10)
-    else:
-        gl_config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='ga', evoluation_time=100)
-
+    global sequential
+    sequential = False
+    # if want to dbg set epochs=1 and limit_data=True
+    gl_config = MyConfig(epochs=100, verbose=2, limit_data=False, name='ga', evoluation_time=3)
     ga = GA(gl_config=gl_config)
-    ga.genetic_grow_model()
+    ga.ga_main()

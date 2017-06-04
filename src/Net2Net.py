@@ -95,7 +95,7 @@ class Net2Net(object):
             try:
                 _after_model.get_layer(name=name).set_weights(weights)
             except Exception as inst:
-                logger.warning("except {}".format(inst))
+                logger.info("ignore {}".format(inst))
 
     def skip(self, model, from_name, to_name, config):
         # original: node1-> node2 -> node3
@@ -121,8 +121,17 @@ class Net2Net(object):
         self.copy_weight(model, new_model)
 
         # Way 1
+        # w, b = new_model.get_layers(node2.name)[0].get_weights()
+        # w, b = Net2Net.rand_weight_like(w)
+        # new_model.get_layers(node2.name)[0].set_weights((w, b))
+
+        # way 2 do nothing
+
+        # way 3 divided by 2
         w, b = new_model.get_layers(node2.name)[0].get_weights()
         w, b = Net2Net.rand_weight_like(w)
+        w=w/2
+        b=b/2
         new_model.get_layers(node2.name)[0].set_weights((w, b))
 
         return new_model
@@ -261,11 +270,7 @@ class Net2Net(object):
 
 if __name__ == "__main__":
 
-    dbg = False
-    if dbg:
-        config = MyConfig(epochs=0, verbose=2, dbg=dbg, name='before')
-    else:
-        config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='before')
+    config = MyConfig(epochs=100, verbose=1, limit_data=False, name='before')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 16}],
                ["Conv2D", 'Conv2D2', {'filters': 64}],
                ["MaxPooling2D", 'maxpooling2d1', {}],
@@ -277,11 +282,13 @@ if __name__ == "__main__":
     before_model.comp_fit_eval()
 
     net2net = Net2Net()
-    after_model = net2net.wider_conv2d(before_model, layer_name='Conv2D1', width_ratio=2, config=config.copy('wide'))
+    # after_model = net2net.wider_conv2d(before_model, layer_name='Conv2D1', width_ratio=2, config=config.copy('wide'))
+    after_model = net2net.deeper_conv2d(before_model, layer_name='Conv2D1', config=config.copy('deeper1'))
     after_model.comp_fit_eval()
-    after_model = net2net.deeper_conv2d(after_model, layer_name='Conv2D2', config=config.copy('deeper'))
+    after_model = net2net.deeper_conv2d(after_model, layer_name='Conv2D2', config=config.copy('deeper2'))
     after_model.comp_fit_eval()
-    after_model = net2net.avepool_by_name(after_model, name='Conv2D2', config=config.copy('avepool'))
+    # after_model = net2net.avepool_by_name(after_model, name='Conv2D2', config=config.copy('avepool'))
+    after_model = net2net.deeper_conv2d(after_model, layer_name='Conv2D3', config=config.copy('deeper3'))
     after_model.comp_fit_eval()
     after_model = net2net.skip(after_model, from_name='Conv2D1', to_name='Conv2D2', config=config.copy('skip'))
     after_model.comp_fit_eval()

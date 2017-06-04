@@ -43,10 +43,10 @@ import logging, sys,json
 # logging.basicConfig(filename='output/net2net.log', level=logging.DEBUG)
 
 logger = logging.getLogger('net2net')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
 
 ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.WARNING)
 formatter = logging.Formatter('%(asctime)s -  %(levelname)s -------- \n\t%(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
@@ -86,7 +86,7 @@ class MyConfig(object):
             Utils.mkdir_p(self.tf_log_path)
             Utils.mkdir_p(self.output_path)
 
-    def __init__(self, epochs=100, verbose=1, dbg=False, name='default_name', evoluation_time=1,clean=True):
+    def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True):
         # TODO check when name = 'default_name'
         # for all model
         # self.tf_graph = tf.get_default_graph()
@@ -101,7 +101,7 @@ class MyConfig(object):
 
         # for single model
         self.set_name(name,clean=clean)
-        self.dbg = dbg
+        self.dbg = limit_data
         self.input_shape = (3, 32, 32) if K.image_data_format() == "Channels_first" else (32, 32, 3)
         self.nb_class = 10
         self.batch_size = 256
@@ -111,9 +111,9 @@ class MyConfig(object):
                                             min_lr=0.5e-7)
         self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
         self.csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
-
+        self.limit_data=limit_data
         # for all model, but determined when init the first config
-        if dbg:
+        if limit_data:
             self.dataset = self.load_data(9999)
             logger.setLevel(logging.INFO)  # TODO modify when release
         else:

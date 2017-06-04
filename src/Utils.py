@@ -1,6 +1,7 @@
 import tensorflow as tf
 import keras
 import json, subprocess, matplotlib
+import numpy as np
 
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -18,7 +19,21 @@ root_dir = osp.normpath(
 from IPython.display import display, HTML, SVG
 
 
-# TODO map length name to clean ones
+# TODO map lengthy name to clean ones
+
+def choice_dict(mdict, size):
+    choice = np.random.choice(mdict.keys(), size=size, replace=False)
+    return {name:model for name,model in mdict.items() if name in choice}
+
+
+# descrapted
+def dict2list(mdict):
+    return [(a, b) for a, b in mdict.items()]
+
+
+def list2dict(mlist):
+    return {a: b for (a, b) in mlist}
+
 
 def mkdir_p(name, delete=True):
     # TODO it is not good for debug
@@ -150,8 +165,15 @@ def strip_consts(graph_def, max_const_size=32):
                 tensor.tensor_content = tf.compat.as_bytes("<stripped %d bytes>" % size)
     return strip_def
 
+def to_single_dir():
+    os.chdir( root_dir)
+    for parent, dirnames, filenames in os.walk('output/tf_tmp'):
+        filenames=sorted(filenames)
+        for ind,fn in enumerate(filenames):
+            subprocess.call(('mkdir -p '+parent+'/'+str(ind)).split())
+            subprocess.call(('mv '+parent+'/'+fn+' '+parent+'/'+str(ind)+'/').split())
+        print parent,filenames
 
-# also test file
+
 if __name__ == "__main__":
-    plt.plot([1, 2, 4], [3, 6, 10])
-    plt.show()
+    to_single_dir()

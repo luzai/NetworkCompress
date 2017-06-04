@@ -49,22 +49,23 @@ root_dir = osp.normpath(
 
 with_caffe = False
 if with_caffe == True:
-    # if os.path.isfile("/home/luzai/luzai/luzai"):
-    #     caffe_root = "/home/luzai/App/caffe"
-    # elif os.path.exists("/home/vipa"):
-    #     caffe_root = "/home/luzai/App/caffe"
-    # else:
-    #     caffe_root = input("input your caffe root")
-    # os.chdir(caffe_root + "/python")
-    # sys.path.insert(0, caffe_root + "/python")
-    # print(sys.path)
+    if os.path.isfile("/home/luzai/luzai/luzai"):
+        caffe_root = "/home/luzai/App/caffe"
+    elif os.path.exists("/home/vipa"):
+        caffe_root = "/home/luzai/App/caffe"
+    else:
+        caffe_root = input("input your caffe root")
+    os.chdir(caffe_root + "/python")
+    sys.path.insert(0, caffe_root + "/python")
+    print(sys.path)
     try:
-        caffe = imp.load_source('caffe', '/home/luzai/App/caffe/python')
+        import caffe
+        # caffe = imp.load_source('caffe', '/home/luzai/App/caffe/python')
     except Exception as inst:
         print(inst)
     finally:
         pass
-        # os.chdir(run_root)
+        os.chdir(root_dir)
 
 import keras
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping

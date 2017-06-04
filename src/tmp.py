@@ -13,8 +13,8 @@ queue = mp.Queue()
 # for t in tt:
 #     t.join()
 
-for name in ['ga', 'ga_iter_1_ind_1']:
-    GAClient.run_self(queue, name, 0, 1)
+for name in ['ga_iter_0_ind_0']:#, 'ga_iter_1_ind_1']:
+    GAClient.run_self(queue, name, epochs=1, verbose=1,limit_data=True)
 print queue.get()
 # import  subprocess
 # subprocess.call("which python".split())

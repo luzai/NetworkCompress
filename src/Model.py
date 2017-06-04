@@ -281,9 +281,9 @@ if __name__ == "__main__":
 
     dbg = True
     if dbg:
-        config = MyConfig(epochs=0, verbose=1, dbg=dbg, name='model_test')
+        config = MyConfig(epochs=0, verbose=1, limit_data=dbg, name='model_test')
     else:
-        config = MyConfig(epochs=100, verbose=1, dbg=dbg, name='model_test')
+        config = MyConfig(epochs=100, verbose=1, limit_data=dbg, name='model_test')
     model_l = [["Conv2D", 'conv1', {'filters': 16}],
                ["Conv2D", 'conv2', {'filters': 64}],
                ["Conv2D", 'conv3', {'filters': 10}],
