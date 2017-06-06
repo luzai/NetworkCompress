@@ -104,6 +104,26 @@ class MyGraph(nx.DiGraph):
         self.add_edge(node, new_node)
         self.add_edge(new_node, next_node)
 
+
+    def group_layer(self, input_tensor, group_num):
+        def f(input):
+            group_output = []
+
+            for i in range(group_num):
+                #TODO: use identity kernel. Initilizers's Identity can not work
+                tower = Conv2D(120, (1, 1), padding='same', activation='relu')(input_tensor)
+                tower = Conv2D(120 / group_num, (3, 3), padding='same', activation='relu')(tower)
+                group_output.append(tower)
+
+            if K.image_data_format() == 'channels_first':
+                axis = 1
+            elif K.image_data_format() == 'channels_last':
+                axis = 3
+            output = Concatenate(axis=axis)(group_output)
+
+            return output
+        return f
+
     def to_model(self, input_shape, graph, name="default_for_op"):
         # with graph.as_default():
         #     with tf.name_scope(name) as scope:
@@ -131,6 +151,9 @@ class MyGraph(nx.DiGraph):
 
                     layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
                                    activation='relu')
+
+                elif node.type == 'Group':
+                    layer = self.group_layer(layer_input_tensor, group_num = node.config['group_num'])
 
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)

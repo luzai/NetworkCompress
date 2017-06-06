@@ -38,11 +38,82 @@ class Net2Net(object):
         return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config)
 
     def wider(self, model, config):
-        pass
+        names = [node.name
+                 for node in model.graph.nodes()
+                 if node.type == 'Conv2D']
+
+        model_conv_depth = len(names)
+
+        # random choose a layer to wider, except last conv layer
+        choice = names[np.random.randint(0, len(names) - 1)]
+
+        # The ratio of widening propto depth
+        #TODO: put these two variables to config ?
+        max_width_ratio = 4
+        max_depth = 20
+        width_ratio = (1.0 * (max_width_ratio - 1) * model_conv_depth / max_depth) + 1.0
+
+        return self.wider_conv2d(model, layer_name = choice, width_ratio = width_ratio, config = config)
 
     def add_skip(self, model, config):
-        # TODO selct by using topology sort
-        pass
+        import networkx as nx
+        assert nx.is_directed_acyclic_graph(model.graph)
+        topo_nodes = nx.topological_sort(model.graph)
+
+        names = [node.name for node in topo_nodes
+                      if node.type == 'Conv2D']
+
+        if len(names) == 1:
+            return model
+
+        #find two conjacent conv nodes, which hasn't add skip yet
+        max_iter = 1000
+        for i in range(max_iter + 1):
+            if i == max_iter:
+                return model
+            from_idx = np.random.randint(0, len(names) - 2)
+            to_idx = from_idx + 1
+            next_nodes = model.graph.get_nodes(names[to_idx], next_layer=True, last_layer=False)
+            if 'Concatenate' in [node.type for node in next_nodes]:
+                continue
+            else:
+                break
+
+        from_name = names[from_idx]
+        to_name = names[to_idx]
+
+        return self.skip(model, from_name, to_name, config)
+
+    #add group operation
+    def add_group(self, model, config):
+
+        names = [node.name
+                 for node in model.graph.nodes()
+                 if node.type == 'Conv2D']
+
+        #random choose a layer to concat a group operation
+        choice = names[np.random.randint(0, len(names))]
+        group_num = np.random.randint(2, 5)
+
+        # add node and edge to the graph
+        new_graph = model.graph.copy()
+        node = new_graph.get_nodes(choice)[0]
+        node_suc = new_graph.get_nodes(choice, next_layer = True)[0]
+        new_graph.update()
+        new_name = 'Group' + \
+                   str(
+                       1 + max(new_graph.type2ind.get('Group', [0]))
+                   )
+        new_node = Node(type='Group', name=new_name, config={'group_num' : group_num})
+        new_graph.add_node(new_node)
+        new_graph.remove_edge(node, node_suc)
+        new_graph.add_edge(node, new_node)
+        new_graph.add_edge(new_node, node_suc)
+        new_model = MyModel(config=config, graph=new_graph)
+
+        #self.copy_weight(model, new_model)
+        return new_model
+
 
     def maxpool_by_name(self, model, name, config):
         new_graph = model.graph.copy()
@@ -282,6 +353,18 @@ if __name__ == "__main__":
     before_model.comp_fit_eval()
 
     net2net = Net2Net()
+
+    model = net2net.deeper(before_model, config=config)
+    model.comp_fit_eval()
+    model = net2net.wider(model, config=config)
+    model.comp_fit_eval()
+    model = net2net.add_skip(model, config=config)
+    model.comp_fit_eval()
+    model = net2net.add_group(model, config=config)
+    model.comp_fit_eval()
+    model.vis()
+
+    '''
     # after_model = net2net.wider_conv2d(before_model, layer_name='Conv2D1', width_ratio=2, config=config.copy('wide'))
     after_model = net2net.deeper_conv2d(before_model, layer_name='Conv2D1', config=config.copy('deeper1'))
     after_model.comp_fit_eval()
@@ -294,3 +377,4 @@ if __name__ == "__main__":
     after_model.comp_fit_eval()
 
     # from IPython import embed; embed()
+    '''
