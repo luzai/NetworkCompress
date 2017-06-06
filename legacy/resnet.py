@@ -52,7 +52,7 @@ def _bn_relu_conv(**conv_params):
     nb_filter = conv_params["nb_filter"]
     nb_row = conv_params["nb_row"]
     nb_col = conv_params["nb_col"]
-    subsample = conv_params.setdefault("subsample", (1,1))
+    subsample = conv_params.setdefault("subsample", (1, 1))
     init = conv_params.setdefault("init", "he_normal")
     border_mode = conv_params.setdefault("border_mode", "same")
     W_regularizer = conv_params.setdefault("W_regularizer", l2(1.e-4))
@@ -92,6 +92,7 @@ def _shortcut(input, residual):
 def _residual_block(block_function, nb_filter, repetitions, is_first_layer=False):
     """Builds a residual block with repeating bottleneck blocks.
     """
+
     def f(input):
         for i in range(repetitions):
             init_subsample = (1, 1)
@@ -108,15 +109,16 @@ def basic_block(nb_filter, init_subsample=(1, 1), is_first_block_of_first_layer=
     """Basic 3 X 3 convolution blocks for use on resnets with layers <= 34.
     Follows improved proposed scheme in http://arxiv.org/pdf/1603.05027v2.pdf
     """
+
     def f(input):
 
         if is_first_block_of_first_layer:
             # don't repeat bn->relu since we just did bn->relu->maxpool
             conv1 = Convolution2D(nb_filter=nb_filter,
-                                 nb_row=3, nb_col=3,
-                                 subsample=init_subsample,
-                                 init="he_normal", border_mode="same",
-                                 W_regularizer=l2(0.0001))(input)
+                                  nb_row=3, nb_col=3,
+                                  subsample=init_subsample,
+                                  init="he_normal", border_mode="same",
+                                  W_regularizer=l2(0.0001))(input)
         else:
             conv1 = _bn_relu_conv(nb_filter=nb_filter, nb_row=3, nb_col=3,
                                   subsample=init_subsample)(input)
@@ -134,15 +136,16 @@ def bottleneck(nb_filter, init_subsample=(1, 1), is_first_block_of_first_layer=F
     Returns:
         A final conv layer of nb_filter * 4
     """
+
     def f(input):
 
         if is_first_block_of_first_layer:
             # don't repeat bn->relu since we just did bn->relu->maxpool
             conv_1_1 = Convolution2D(nb_filter=nb_filter,
-                                 nb_row=1, nb_col=1,
-                                 subsample=init_subsample,
-                                 init="he_normal", border_mode="same",
-                                 W_regularizer=l2(0.0001))(input)
+                                     nb_row=1, nb_col=1,
+                                     subsample=init_subsample,
+                                     init="he_normal", border_mode="same",
+                                     W_regularizer=l2(0.0001))(input)
         else:
             conv_1_1 = _bn_relu_conv(nb_filter=nb_filter, nb_row=1, nb_col=1,
                                      subsample=init_subsample)(input)
@@ -251,7 +254,9 @@ class ResnetBuilder(object):
     def build_resnet_152(input_shape, num_outputs):
         return ResnetBuilder.build(input_shape, num_outputs, bottleneck, [3, 8, 36, 3])
 
-if __name__=="__main__":
-    model=ResnetBuilder.build_resnet_18([28,28,3],10)
+
+if __name__ == "__main__":
+    model = ResnetBuilder.build_resnet_18([28, 28, 3], 10)
     from net2net import save_model_config
-    save_model_config(model,name="resnet")
+
+    save_model_config(model, name="resnet")

@@ -9,7 +9,8 @@ import scipy
 import scipy.ndimage
 from keras.utils.conv_utils import convert_kernel
 
-from Config import MyConfig, logger
+from Config import MyConfig
+from Logger import  logger
 from Model import MyModel, MyGraph, Node
 
 
@@ -166,7 +167,10 @@ class Net2Net(object):
             try:
                 _after_model.get_layer(name=name).set_weights(weights)
             except Exception as inst:
-                logger.info("ignore {}".format(inst))
+                logger.info("ignore copy layer {} from model {} to model {} because {}".format(name,
+                                                                                               before_model.config.name,
+                                                                                               after_model.config.name,
+                                                                                               inst))
 
     def skip(self, model, from_name, to_name, config):
         # original: node1-> node2 -> node3
@@ -192,18 +196,18 @@ class Net2Net(object):
         self.copy_weight(model, new_model)
 
         # Way 1
-        # w, b = new_model.get_layers(node2.name)[0].get_weights()
-        # w, b = Net2Net.rand_weight_like(w)
-        # new_model.get_layers(node2.name)[0].set_weights((w, b))
+        w, b = new_model.get_layers(node2.name)[0].get_weights()
+        w, b = Net2Net.rand_weight_like(w)
+        new_model.get_layers(node2.name)[0].set_weights((w, b))
 
         # way 2 do nothing
 
         # way 3 divided by 2
-        w, b = new_model.get_layers(node2.name)[0].get_weights()
-        w, b = Net2Net.rand_weight_like(w)
-        w=w/2
-        b=b/2
-        new_model.get_layers(node2.name)[0].set_weights((w, b))
+        # w, b = new_model.get_layers(node2.name)[0].get_weights()
+        # w, b = Net2Net.rand_weight_like(w)
+        # w = w / 2
+        # b = b / 2
+        # new_model.get_layers(node2.name)[0].set_weights((w, b))
 
         return new_model
 
@@ -340,8 +344,7 @@ class Net2Net(object):
 
 
 if __name__ == "__main__":
-
-    config = MyConfig(epochs=100, verbose=1, limit_data=False, name='before')
+    config = MyConfig(epochs=50, verbose=1, limit_data=False, name='before')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 16}],
                ["Conv2D", 'Conv2D2', {'filters': 64}],
                ["MaxPooling2D", 'maxpooling2d1', {}],
@@ -375,6 +378,15 @@ if __name__ == "__main__":
     after_model.comp_fit_eval()
     after_model = net2net.skip(after_model, from_name='Conv2D1', to_name='Conv2D2', config=config.copy('skip'))
     after_model.comp_fit_eval()
+    after_model = net2net.skip(after_model, from_name='Conv2D1', to_name='Conv2D2', config=config.copy('skip2'))
+    after_model.comp_fit_eval()
+    # after_model = net2net.wider_conv2d(after_model, layer_name='Conv2D1', width_ratio=2, config=config.copy('wide1'))
+    # after_model.comp_fit_eval()
+    # after_model = net2net.wider_conv2d(after_model, layer_name='Conv2D2', width_ratio=2, config=config.copy('wide2'))
+    # after_model.comp_fit_eval()
+    # after_model = net2net.wider_conv2d(after_model, layer_name='Conv2D3', width_ratio=2, config=config.copy('wide3'))
+    # after_model.comp_fit_eval()
+
 
     # from IPython import embed; embed()
     '''

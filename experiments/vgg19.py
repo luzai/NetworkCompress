@@ -9,7 +9,8 @@ from __future__ import print_function
 
 '''
 import sys
-sys.path.insert(0,"../legacy")
+
+sys.path.insert(0, "../legacy")
 
 from net2net import *
 import numpy as np
@@ -23,12 +24,11 @@ lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown
 early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5)
 csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
 
-def ori_vgg():
 
+def ori_vgg():
     input_shape = (3, 32, 32)  # image shape
 
-
-    img_input=Input(shape=input_shape)
+    img_input = Input(shape=input_shape)
     # Block 1
     x = Convolution2D(64, 3, 3, activation='relu', border_mode='same', name='block1_conv1')(img_input)
     x = Convolution2D(64, 3, 3, activation='relu', border_mode='same', name='block1_conv2')(x)
@@ -60,7 +60,6 @@ def ori_vgg():
     x = Convolution2D(512, 3, 3, activation='relu', border_mode='same', name='block5_conv4')(x)
     x = MaxPooling2D((2, 2), strides=(2, 2), name='block5_pool')(x)
 
-
     # Classification block
     x = Flatten(name='flatten')(x)
     x = Dense(2048, activation='relu', name='fc1')(x)
@@ -69,13 +68,14 @@ def ori_vgg():
     model = Model(img_input, x)
     return model
 
+
 def modified_vgg():
     input_shape = (3, 32, 32)  # image shape
 
     img_input = Input(shape=input_shape)
     # Block 1
     x = Convolution2D(64, 3, 3, activation='relu', border_mode='same', name='block1_conv1')(img_input)
-    x=BatchNormalization()(x)
+    x = BatchNormalization()(x)
     x = Convolution2D(64, 3, 3, activation='relu', border_mode='same', name='block1_conv2')(x)
     x = BatchNormalization()(x)
     x = MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool')(x)
@@ -112,10 +112,11 @@ def modified_vgg():
     model = Model(img_input, x)
     return model
 
+
 train_data, validation_data = load_data(dbg=1)
 
 # Create model
-model=modified_vgg()
+model = modified_vgg()
 # model=ori_vgg()
 model.compile(loss='categorical_crossentropy',
               optimizer=SGD(lr=0.01, momentum=0.9),
@@ -136,15 +137,15 @@ datagen = ImageDataGenerator(
     channel_shift_range=0.001)  # randomly flip images
 
 datagen.fit(train_data[0])
-history=model.fit_generator(datagen.flow(train_data[0], train_data[1],
-                                         batch_size=batch_size),
-                            samples_per_epoch=train_data[0].shape[0],
-                            nb_epoch=200,
-                            validation_data=validation_data,
-                            verbose=2,callbacks=[lr_reducer, early_stopper, csv_logger])
+history = model.fit_generator(datagen.flow(train_data[0], train_data[1],
+                                           batch_size=batch_size),
+                              samples_per_epoch=train_data[0].shape[0],
+                              nb_epoch=200,
+                              validation_data=validation_data,
+                              verbose=2, callbacks=[lr_reducer, early_stopper, csv_logger])
 
-vgg_acc=history.history["val_acc"]
+vgg_acc = history.history["val_acc"]
 print(vgg_acc)
-np.save("vgg.npy",vgg_acc)
+np.save("vgg.npy", vgg_acc)
 plt.plot(vgg_acc)
 plt.savefig("vgg.png")

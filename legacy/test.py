@@ -31,6 +31,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 FLAGS = None
 
+
 class Config(object):
     # Parameters
     learning_rate = 0.001
@@ -52,13 +53,14 @@ class Config(object):
     n_input = 784  # MNIST data input (img shape: 28*28)
     n_classes = 10  # MNIST total classes (0-9 digits)
     dropout = 0.75  # Dropout, probability to keep units
-    device="/gpu:0"
+    device = "/gpu:0"
+
     def __init__(self):
-        self.root_dir="/home/xlwang/NetworkCompress/"
-        self.log_dir = self.root_dir+"tmp_tf/log/"
-        self.save_dir = self.root_dir+"tmp_tf/save/"
-        self.data_dir= self.root_dir + "tmp_tf/data/"
-        self.tmp_dit=self.root_dir+"tmp_tf/"
+        self.root_dir = "/home/xlwang/NetworkCompress/"
+        self.log_dir = self.root_dir + "tmp_tf/log/"
+        self.save_dir = self.root_dir + "tmp_tf/save/"
+        self.data_dir = self.root_dir + "tmp_tf/data/"
+        self.tmp_dit = self.root_dir + "tmp_tf/"
         self.sess_config = tf.ConfigProto(
             allow_soft_placement=True,
             log_device_placement=True,
@@ -67,6 +69,7 @@ class Config(object):
         )
         self.sess_config.gpu_options.allow_growth = True
         # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
+
     def check_path(self):
         if tf.gfile.Exists(config.log_dir):
             tf.gfile.DeleteRecursively(config.log_dir)
@@ -78,7 +81,9 @@ class Config(object):
         if not tf.gfile.Exists(config.data_dir):
             tf.gfile.MakeDirs(config.data_dir)
 
-config=Config()
+
+config = Config()
+
 
 def train():
     # Import data

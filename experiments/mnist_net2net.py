@@ -65,12 +65,13 @@ from keras.datasets import mnist
 import tensorflow as tf
 
 import keras.backend as K
+
 sess_config = tf.ConfigProto(
-            allow_soft_placement = True,
-            # log_device_placement = True,
-            # inter_op_parallelism_threads = 8,
-            # intra_op_parallelism_threads = 8
-        )
+    allow_soft_placement=True,
+    # log_device_placement = True,
+    # inter_op_parallelism_threads = 8,
+    # intra_op_parallelism_threads = 8
+)
 sess_config.gpu_options.allow_growth = True
 # sess_config.gpu_options.per_process_gpu_memory_fraction = 0.8
 sess = tf.Session(config=sess_config)

@@ -58,7 +58,7 @@ def rand_cmd(possible_layer):
                 break
         # layer_type = re.findall(r"[a-z]+", new_layer)[0]
         # layer_ind = int(re.findall(r"\d+", new_layer)[0])
-        possible_layer.insert(i + 1, "^_"+new_layer )
+        possible_layer.insert(i + 1, "^_" + new_layer)
         possible_layer = reorder_list(possible_layer)
     return possible_layer, cmd
 
@@ -92,25 +92,24 @@ if __name__ == "__main__":
         layer_names = [l.name for l in teacher_model.layers]
         possible_layer = []
         for layer in layer_names:
-            if layer[0:2]=="^_":
+            if layer[0:2] == "^_":
                 continue
             layer_type = re.findall(r"^[a-z_]+", layer)
             if len(layer_type) > 0 \
                     and layer_type[0] == "conv" or layer_type[0] == "fc":
                 possible_layer += [layer]
 
-        print("possible layer",possible_layer)
+        print("possible layer", possible_layer)
 
-        name=re.sub(r"\s","_",datetime.datetime.now().ctime())
-        name=re.sub(r":","_",name)
+        name = re.sub(r"\s", "_", datetime.datetime.now().ctime())
+        name = re.sub(r":", "_", name)
         command = [name]
         print(command)
-        for I in range(np.random.randint(3,8)):
+        for I in range(np.random.randint(3, 8)):
             possible_layer, cmd = rand_cmd(possible_layer)
             command.append(cmd)
 
         pprint(command)
-
 
         student_model, log1 = make_model(teacher_model, command,
                                          train_data, validation_data)

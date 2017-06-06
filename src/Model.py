@@ -1,19 +1,18 @@
 # Dependenct: Utils, Config
 import json
 
+import keras
 import networkx as nx
 import numpy as np
-import keras
-import tensorflow as tf
 from keras.backend import tensorflow_backend as ktf
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Input, Activation
 from keras.models import Model
 from networkx.readwrite import json_graph
 
-import Config
 import Utils
 from Config import MyConfig
+from Logger import logger
 
 
 class Node(object):
@@ -192,6 +191,10 @@ class MyGraph(nx.DiGraph):
                             layer_input_tensors[ind] = \
                                 keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(layer_input_tensor)
 
+                    def div2(x):
+                        return x / 2.
+
+                    layer_input_tensors = [keras.layers.Lambda(div2)(tensor) for tensor in layer_input_tensors]
                     layer = keras.layers.Concatenate(axis=chn_ind)
                 layer_output_tensor = layer(layer_input_tensors)
 
@@ -208,7 +211,7 @@ class MyGraph(nx.DiGraph):
         import time
         tic = time.time()
         model = Model(inputs=input_tensor, outputs=output_tensor)
-        Config.logger.info('Consume Time(Just Build model: {}'.format(time.time() - tic))
+        logger.info('Consume Time(Just Build model: {}'.format(time.time() - tic))
 
         return model
 
@@ -248,25 +251,27 @@ class MyModel(object):
         return map(_get_layer, [node.name for node in nodes])
 
     def compile(self):
-        self.model.compile(optimizer='rmsprop',
+        self.model.compile(optimizer='adam',  # rmsprop
                            loss='categorical_crossentropy',
                            metrics=['accuracy'])
 
     def fit(self):
         import time
         tic = time.time()
-
-        self.model.fit(self.config.dataset['train_x'],
-                       self.config.dataset['train_y'],
-                       # validation_split=0.2,
-                       validation_data=(self.config.dataset['test_x'], self.config.dataset['test_y']),
-                       verbose=self.config.verbose,
-                       batch_size=self.config.batch_size,
-                       epochs=self.config.epochs,
-                       callbacks=[self.config.lr_reducer, self.config.early_stopper, self.config.csv_logger,
-                                  TensorBoard(log_dir=self.config.tf_log_path)]
-                       )
-        Config.logger.info("Fit model Consume {}:".format(time.time() - tic))
+        logger.info("Start train model {}\n".format(self.config.name))
+        hist = self.model.fit(self.config.dataset['train_x'],
+                              self.config.dataset['train_y'],
+                              # validation_split=0.2,
+                              validation_data=(self.config.dataset['test_x'], self.config.dataset['test_y']),
+                              verbose=self.config.verbose,
+                              batch_size=self.config.batch_size,
+                              epochs=self.config.epochs,
+                              callbacks=[self.config.lr_reducer, self.config.csv_logger, self.config.early_stopper,
+                                         TensorBoard(log_dir=self.config.tf_log_path)]
+                              )
+        # todo earlystop?
+        logger.info("Fit model {} Consume {}:".format(self.config.name, time.time() - tic))
+        return hist
 
     def evaluate(self):
         score = self.model.evaluate(self.config.dataset['test_x'],
@@ -276,26 +281,29 @@ class MyModel(object):
 
     def vis(self):
         Utils.vis_model(self.model, self.config.name)
-        Utils.vis_graph(self.graph, self.config.name, show=False)
+        if hasattr(self, 'graph'):
+            Utils.vis_graph(self.graph, self.config.name, show=False)
+        logger.info("Vis model {} :".format(self.config.name))
         self.model.summary()
         trainable_count, non_trainable_count = Utils.count_weight(self.model)
-        Config.logger.info(
-            "trainable weight {} MB, non trainable_weight {} MB".format(trainable_count, non_trainable_count))
+        logger.info(
+            "model {} trainable weight {} MB, non trainable_weight {} MB".format(self.config.name,
+                                                                                 trainable_count,
+                                                                                 non_trainable_count))
 
     def comp_fit_eval(self):
         # assert tf.get_default_graph() is self.config.tf_graph, "graph same"
         # with self.config.tf_graph.as_default():
         #     with tf.name_scope(self.config.name):
         self.compile()
-
+        self.vis()
         # with self.config.sess.as_default():
         #     assert tf.get_default_graph() is self.config.tf_graph, "graph same"
         #     with tf.name_scope(self.config.name):
-        self.fit()
+        hist = self.fit()
 
         score = self.evaluate()
-        print('\n-- loss and accuracy --\n')
-        print(score)
+        logger.info('model {} loss {} and accuracy {} \n'.format(self.config.name, score[0], score[1]))
 
         return score[-1]
 
@@ -304,7 +312,7 @@ if __name__ == "__main__":
 
     dbg = True
     if dbg:
-        config = MyConfig(epochs=0, verbose=1, limit_data=dbg, name='model_test')
+        config = MyConfig(epochs=1, verbose=1, limit_data=dbg, name='model_test')
     else:
         config = MyConfig(epochs=100, verbose=1, limit_data=dbg, name='model_test')
     model_l = [["Conv2D", 'conv1', {'filters': 16}],

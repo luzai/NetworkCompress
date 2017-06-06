@@ -23,7 +23,6 @@ def parse_args():
     return _args
 
 
-
 if __name__ == "__main__":
 
     args = parse_args()
@@ -53,7 +52,8 @@ if __name__ == "__main__":
     '''train net2net student model'''
     command = [
         "net2net",  # model name
-        ["net2wider", "conv1", 2, args.nb_epoch, args.gl_verbose],  # command name, new layer, new width, number of epoch
+        ["net2wider", "conv1", 2, args.nb_epoch, args.gl_verbose],
+        # command name, new layer, new width, number of epoch
         # ["net2wider", "conv2", 2, args.nb_epoch, args.gl_verbose],  # command name, new layer, new width, number of epoch
         ["net2wider", "fc1", 2, args.nb_epoch, args.gl_verbose],
         # ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],
@@ -76,4 +76,4 @@ if __name__ == "__main__":
     '''print log'''
     map(lambda x: pprint(x, indent=2), ["\n", log0, "\n", log1])
 
-    vis(log0, [log1],command)
+    vis(log0, [log1], command)

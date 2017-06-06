@@ -9,20 +9,21 @@ import Utils
 from Config import MyConfig
 from Model import MyModel, MyGraph
 from Net2Net import Net2Net
-import GAClient
+import GAClient, time
+from Logger import logger
 
 
 class GA(object):
     # def my_model2model(self):
     #     raise IOError
 
-    def __init__(self, gl_config):
+    def __init__(self, gl_config, nb_inv=3):
         self.gl_config = gl_config
         self.population = {}
         self.net2net = Net2Net()
         self.max_ind = 0
         self.iter = 0
-        self.nb_inv = 3  # 10 later
+        self.nb_inv = nb_inv  # 10 later
         self.queue = mp.Queue(self.nb_inv)
 
     '''
@@ -99,7 +100,7 @@ class GA(object):
             while not suceeded:
                 evolution_choice_list = ['deeper']  # , 'wider','add_skip']
                 evolution_choice = np.random.choice(evolution_choice_list, 1)[0]
-                print evolution_choice
+                logger.info("evolution choice {}".format(evolution_choice))
                 try:
                     if evolution_choice == 'deeper':
                         after_model = self.net2net.deeper(before_model, config=new_config)
@@ -120,9 +121,9 @@ class GA(object):
 
     def train_process(self):
         clients = []
-        import time
-        time.sleep(np.random.rand()*10)
+
         for model in self.population.values():
+
             # if getattr(model, 'parent', None) is not None:
             # has parents means muatetion and weight change, so need to save weights
             keras.models.save_model(model.model, model.config.model_path)
@@ -134,9 +135,10 @@ class GA(object):
                 verbose=model.config.verbose,
                 limit_data=model.config.limit_data
             )
-            if not sequential:
+            if parallel:
                 c = mp.Process(target=GAClient.run_self, kwargs=d)
                 c.start()
+                time.sleep(np.random.choice([0, 5, 10]))
                 clients.append(c)
             else:
                 GAClient.run(**d)
@@ -145,7 +147,7 @@ class GA(object):
                 score = d[1]
                 setattr(self.population[name], 'score', score)
 
-        if not sequential:
+        if parallel:
             for i in range(len(clients)):
                 d = self.queue.get()
                 name = d[0]
@@ -155,8 +157,6 @@ class GA(object):
                 c.join()
 
     def ga_main(self):
-        # Utils.mkdir_p('output/ga/')
-
         for i in range(self.nb_inv):
             model = self.make_init_model()
             model_l = self.get_model_list(model)
@@ -165,7 +165,7 @@ class GA(object):
             self.population[config.name] = MyModel(config=config, graph=graph)
             self.max_ind += 1
         for i in range(self.gl_config.evoluation_time):
-            Config.logger.info("Now {} evolution ".format(i))
+            logger.info("Now {} evolution ".format(i))
             self.mutation_process()
             self.train_process()
             self.select_process()
@@ -175,13 +175,19 @@ class GA(object):
             assert hasattr(model, 'score'), 'to eval we need score'
         self.population = Utils.choice_dict(self.population, self.nb_inv)
         if len(np.unique(self.population.keys())) == self.nb_inv:
-            print "!warning: sample without replacement"
+            logger.warning("!warning: sample without replacement")
 
 
 if __name__ == "__main__":
-    global sequential
-    sequential = False
-    # if want to dbg set epochs=1 and limit_data=True
-    gl_config = MyConfig(epochs=100, verbose=2, limit_data=False, name='ga', evoluation_time=3)
-    ga = GA(gl_config=gl_config)
+    global parallel
+    dbg = False
+    if dbg:
+        parallel = False  # if want to dbg set epochs=1 and limit_data=True
+        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=3)
+        nb_inv = 3
+    else:
+        parallel = False
+        gl_config = MyConfig(epochs=10, verbose=2, limit_data=False, name='ga', evoluation_time=3)
+        nb_inv = 3
+    ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()

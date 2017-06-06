@@ -1,9 +1,11 @@
-import  matplotlib.image as mpimg
+import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
 import os.path as osp
+
+
 def gray2rgb(gray):
-    rgb = np.zeros((32, 32, 3), dtype = "uint8")
+    rgb = np.zeros((32, 32, 3), dtype="uint8")
     rgb[:, :, 0] = gray
     rgb[:, :, 1] = gray
     rgb[:, :, 2] = gray
@@ -11,15 +13,14 @@ def gray2rgb(gray):
 
 
 def get_transfer_data(transfer_data_path):
-
-    #transfer_data_path = '/home/gx/NetworkCompress/data/transfer_data/'
-    transfer_data_list_path = osp.join(transfer_data_path , 'trans_data_list.txt')
+    # transfer_data_path = '/home/gx/NetworkCompress/data/transfer_data/'
+    transfer_data_list_path = osp.join(transfer_data_path, 'trans_data_list.txt')
 
     X_transfer = []
     Y_transfer = []
 
     file = open(transfer_data_list_path, 'r')
-    file_readlines_save=file.readlines()
+    file_readlines_save = file.readlines()
     nb_transfer_samples = len(file_readlines_save)
     X_transfer = np.zeros((nb_transfer_samples, 32, 32, 3), dtype="uint8")
     Y_transfer = np.zeros((nb_transfer_samples,), dtype="uint8")
@@ -28,7 +29,7 @@ def get_transfer_data(transfer_data_path):
 
     for line in file_readlines_save:
         tmp = line.split(' ')
-        image_path = osp.join(transfer_data_path , tmp[0])
+        image_path = osp.join(transfer_data_path, tmp[0])
         label = tmp[1]
         x = mpimg.imread(image_path)
         if x.shape == (32, 32):
@@ -38,10 +39,9 @@ def get_transfer_data(transfer_data_path):
         Y_transfer[cnt] = label
         cnt = cnt + 1
 
-    X_transfer = X_transfer.transpose((0, 3, 1,2))    
+    X_transfer = X_transfer.transpose((0, 3, 1, 2))
 
-    print('X_transfer shape is: ',  X_transfer.shape)
-    print('Y_transfer shape is: ',  Y_transfer.shape)
-    
+    print('X_transfer shape is: ', X_transfer.shape)
+    print('Y_transfer shape is: ', Y_transfer.shape)
+
     return X_transfer, Y_transfer
-

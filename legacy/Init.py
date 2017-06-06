@@ -4,7 +4,7 @@ print("init")
 import matplotlib, sys, os, \
     glob, cPickle, scipy, \
     argparse, errno, json, \
-    copy, re, time, imp, datetime,\
+    copy, re, time, imp, datetime, \
     cv2, logging
 
 matplotlib.use("TkAgg")
@@ -21,7 +21,7 @@ import subprocess
 # if subprocess.call(_shell_cmd.split()) == 0:
 #     print("reload")
 
-keras_backend = "tensorflow" #tensorflow
+keras_backend = "tensorflow"  # tensorflow
 gpu = True
 if keras_backend == "theano":
     _shell_cmd = "cp /home/xlwang/.keras/keras.json.th /home/xlwang/.keras/keras.json"
@@ -70,7 +70,8 @@ if with_caffe == True:
 import keras
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
-from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, Embedding,MaxPool2D,MaxPooling1D,AveragePooling2D
+from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, \
+    Embedding, MaxPool2D, MaxPooling1D, AveragePooling2D
 from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
 from keras.utils import np_utils, vis_utils

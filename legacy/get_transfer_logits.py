@@ -1,5 +1,6 @@
 from __future__ import print_function
 import numpy as np
+
 np.random.seed(1337)  # for reproducibility
 from keras.models import Sequential, Model, load_model
 from keras.layers import Input, Dense, Dropout, Activation, Flatten
@@ -11,15 +12,15 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from load_transfer_data import get_transfer_data
 
-#1. get transfer data and test data
+# 1. get transfer data and test data
 transfer_data_path = '../data/transfer_data/'
 nb_classes = 10
 (train_x, train_y), (test_x, test_y) = cifar10.load_data()
 transfer_x, transfer_y = get_transfer_data(transfer_data_path)
-transfer_y=transfer_y.reshape((-1,1))
+transfer_y = transfer_y.reshape((-1, 1))
 
-transfer_x=np.concatenate((train_x,transfer_x))
-transfer_y=np.concatenate((train_y,transfer_y))
+transfer_x = np.concatenate((train_x, transfer_x))
+transfer_y = np.concatenate((train_y, transfer_y))
 
 # Convert class vectors to binary class matrices.
 transfer_y = np_utils.to_categorical(transfer_y, nb_classes)
@@ -47,21 +48,21 @@ layer_names = [l.name for l in teacher_model.layers]
 print(layer_names)
 
 # 3. test teacher model's acc in test set
-#pred = teacher_model.predict(test_x, batch_size = 256)
+# pred = teacher_model.predict(test_x, batch_size = 256)
 
 # 3. save teacher model's logits
 teacher_logits_output = K.function([teacher_model.layers[0].input, K.learning_phase()],
-                                  [teacher_model.get_layer(layer_names[-2]).output])
+                                   [teacher_model.get_layer(layer_names[-2]).output])
 
-#layer_output = teacher_logits_output([transfer_x, 0])[0]
+# layer_output = teacher_logits_output([transfer_x, 0])[0]
 layer_output = []
 
 for i in range(transfer_x.shape[0] / 200 + 1):
-    print (i)
+    print(i)
     if i < transfer_x.shape[0] / 200:
-        layer_output.extend(teacher_logits_output([transfer_x[i * 200 : (i + 1) * 200], 0])[0])
+        layer_output.extend(teacher_logits_output([transfer_x[i * 200: (i + 1) * 200], 0])[0])
     else:
-        layer_output.extend(teacher_logits_output([transfer_x[i * 200 : ], 0])[0])
+        layer_output.extend(teacher_logits_output([transfer_x[i * 200:], 0])[0])
 
 np.save('../output/resnet18_logits_transfer.npy', layer_output)
 

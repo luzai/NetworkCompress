@@ -9,18 +9,17 @@ Contributor: @luzai, @miibotree
 ## Environment
 - keras 2.0
 - backend: tensorflow 1.1
-- image_data_format: 'channel_first'
-- Memory: `[lib] cnmem=0.1` is enough (for cifar-10)
+- image_data_format: 'channel_last'
 
 
 ## TODO list:
-@luzai 
-- weight init for deeper 
-- Update readme 
-- write doc 
-- more operation  
-- merge code 
-- tensorboard summary for var  
+@luzai  
+- [ ] single model may be trained multiple time, have a nice event logger(csv or tfevents)
+- [ ] logger for model mutations and training event
+- [ ] Dataset swither(mnist, cifar100 or others)
+- [x] test skip div 2 
+- [x] write doc 
+- [ ] more operation  
 
 @miibotree
 - [ ] Consider wider a layer whose successor is skip structure. 
@@ -29,7 +28,7 @@ Contributor: @luzai, @miibotree
 - [ ] The ratio of widening propto depth 
 - [ ] Propobility of 5 mutation operations 
 - [ ] group rand select in [1,2,4,8], initialize the weights.
-- [ ] BN? and ReLU
+- [ ] BN and ReLU
  
 - [ ] wider_conv, deeper_conv
     - [ ] New compy weight method 'Resize3D'(numpy?)
@@ -43,7 +42,7 @@ Contributor: @luzai, @miibotree
 
 - Use kd loss
   - [x] Train(65770): hard label + transfer label; Test(10000): cifar-10 hard label 
-  - [ ] [wait] use `functional API` rather than `sequence`
+  - [x] use `functional API` rather than `sequence`
   - hard label + soft-target (tune hyper-parameter T)
 - experiments on  comparing two type models: Final Accuracies are similar.
   - Deeper(Different orders) -> Wider: Accuracy grows stable; Train fast

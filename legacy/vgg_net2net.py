@@ -23,11 +23,10 @@ def parse_args():
     return _args
 
 
-vgg_conv_width=[64,64,
-                128,128,
-                256,256,256,256]
-vgg_fc_width=[2048,1024,10]
-
+vgg_conv_width = [64, 64,
+                  128, 128,
+                  256, 256, 256, 256]
+vgg_fc_width = [2048, 1024, 10]
 
 if __name__ == "__main__":
 
@@ -53,14 +52,14 @@ if __name__ == "__main__":
         [l.name for l in teacher_model.layers],
         history.history["val_acc"] if history.history else[],
     ]]
-    student_conv_width,student_fc_width=get_width(teacher_model)
-    print(student_conv_width,student_fc_width)
-    print(vgg_conv_width,vgg_fc_width)
+    student_conv_width, student_fc_width = get_width(teacher_model)
+    print(student_conv_width, student_fc_width)
+    print(vgg_conv_width, vgg_fc_width)
 
-    commands=[]
+    commands = []
     command = [
         "vgg_net2net",  # model name
-        ["net2deeper", "conv2",args.nb_epoch, args.gl_verbose], # conv1
+        ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],  # conv1
         ["net2deeper", "fc1", args.nb_epoch, args.gl_verbose],  # conv1
         ["net2deeper", "conv3", args.nb_epoch, args.gl_verbose],  # conv1
         ["net2deeper", "conv4", args.nb_epoch, args.gl_verbose],  # conv1
@@ -71,18 +70,17 @@ if __name__ == "__main__":
         ["net2wider", "conv8", int(256 / 64.), args.nb_epoch, args.gl_verbose],
         # command name, new layer, new width ratio, number of epoch
 
-        ["net2wider", "conv3",2, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv3", 2, args.nb_epoch, args.gl_verbose],
         ["net2wider", "conv4", 2, args.nb_epoch, args.gl_verbose],
-        ["net2wider", "conv5",4, args.nb_epoch, args.gl_verbose],
-        ["net2wider", "conv6",4, args.nb_epoch, args.gl_verbose],
-        ["net2wider", "conv7", 4,args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv5", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv6", 4, args.nb_epoch, args.gl_verbose],
+        ["net2wider", "conv7", 4, args.nb_epoch, args.gl_verbose],
 
-
-        ["net2wider", "fc1",int(2048./64), args.nb_epoch, args.gl_verbose],
+        ["net2wider", "fc1", int(2048. / 64), args.nb_epoch, args.gl_verbose],
         ["net2wider", "fc2", int(1024. / 64), args.nb_epoch, args.gl_verbose]
 
     ]
-    commands+=[command]
+    commands += [command]
     command = [
         "vgg_net2net1",  # model name
         ["net2deeper", "conv2", args.nb_epoch, args.gl_verbose],  # conv1
@@ -158,17 +156,17 @@ if __name__ == "__main__":
     commands += [command]
     print(commands)
     for command in commands:
-        print(len(command)-1)
+        print(len(command) - 1)
     # exit(-1)
-    sav=[log0]
+    sav = [log0]
     for command in commands:
-        print (command)
+        print(command)
         student_model, log1 = make_model(teacher_model, command,
                                          train_data, validation_data)
         print(get_width(student_model))
-        vis(log0,[log1],command)
+        vis(log0, [log1], command)
         sav.append(log1)
         sav.append([])
-    with open("sav.pkl","w") as f:
-        cPickle.dump(sav,f)
+    with open("sav.pkl", "w") as f:
+        cPickle.dump(sav, f)
     print(sav)

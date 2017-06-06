@@ -11,34 +11,34 @@ except:
 x = [[1.0, 2.0, 3.0, 4.0, 5.0], [6.0, 7.0, 8.0, 9.0, 10.0]]
 
 xx = tf.Variable(x, name='xx')
-m = tf.Variable(tf.random_normal(shape=[ 5]), name='m')
-v = tf.Variable(tf.random_normal(shape=[ 5]), name='v')
+m = tf.Variable(tf.random_normal(shape=[5]), name='m')
+v = tf.Variable(tf.random_normal(shape=[5]), name='v')
 
 init = tf.global_variables_initializer()
 sess = tf.Session()
 
-m_tensor, v_tensor = tf.nn.moments(xx,[0])
-assign_op=m.assign(m_tensor)
+m_tensor, v_tensor = tf.nn.moments(xx, [0])
+assign_op = m.assign(m_tensor)
 
-print sess.run([init,m_tensor,assign_op])
+print sess.run([init, m_tensor, assign_op])
 
 # tf.add_to_collection('vars', xx)
 # tf.add_to_collection('vars', m)
 # tf.add_to_collection('vars', v)
 
 saver = tf.train.Saver()
-model_dir= 'tmp_tf/model/'
-model_name='model'
+model_dir = 'tmp_tf/model/'
+model_name = 'model'
 if tf.gfile.Exists(model_dir):
     tf.gfile.DeleteRecursively(model_dir)
 tf.gfile.MakeDirs(model_dir)
-saver.save(sess, model_dir+model_name)
+saver.save(sess, model_dir + model_name)
 print tf.global_variables()
 
-print '-'*10
+print '-' * 10
 
 sess = tf.Session()
-saver = tf.train.import_meta_graph(model_dir+model_name+'.meta')
+saver = tf.train.import_meta_graph(model_dir + model_name + '.meta')
 saver.restore(sess, tf.train.latest_checkpoint(model_dir))
 
 # all_vars = tf.get_collection('vars')

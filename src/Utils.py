@@ -1,14 +1,18 @@
-import tensorflow as tf
+import subprocess
+
 import keras
-import json, subprocess, matplotlib
+import keras.backend as K
+import matplotlib
 import numpy as np
+import os
+import re
+import tensorflow as tf
 
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import networkx as nx
-import os
 import os.path as osp
-
+from Logger import logger
 from keras.utils import vis_utils
 
 # from Init import root_dir
@@ -23,7 +27,7 @@ from IPython.display import display, HTML, SVG
 
 def choice_dict(mdict, size):
     choice = np.random.choice(mdict.keys(), size=size, replace=False)
-    return {name:model for name,model in mdict.items() if name in choice}
+    return {name: model for name, model in mdict.items() if name in choice}
 
 
 # descrapted
@@ -54,21 +58,12 @@ def vis_model(model, name='net2net', show_shapes=True):
     mkdir_p(osp.join(root_dir, "output", path), delete=False)
     os.chdir(osp.join(root_dir, "output", path))
     keras.models.save_model(model, name + '.h5')
-    # with open(name + "_model.json", "w") as f:
-    #     json.dump(
-    #         json.loads(model.to_json()),
-    #         f,
-    #         indent=2
-    #     )
     try:
         vis_utils.plot_model(model, to_file=name + '.pdf', show_shapes=show_shapes)
         vis_utils.plot_model(model, to_file=name + '.png', show_shapes=show_shapes)
     except Exception as inst:
-        print inst
+        logger.warning("{}".format(inst))
     os.chdir(osp.join(root_dir, 'src'))
-
-
-import Config
 
 
 def vis_graph(graph, name='net2net', show=False):
@@ -77,9 +72,7 @@ def vis_graph(graph, name='net2net', show=False):
     if path == '':
         path = name
     mkdir_p(osp.join(root_dir, "output", path), delete=False)
-
     os.chdir(osp.join(root_dir, "output", path))
-
     with open(name + "_graph.json", "w") as f:
         f.write(graph.to_json())
     try:
@@ -90,11 +83,8 @@ def vis_graph(graph, name='net2net', show=False):
         plt.savefig('graph.png')
         plt.close('all')
     except Exception as inst:
-        Config.logger.warning(inst)
+        logger.warning(inst)
     os.chdir(osp.join(root_dir, 'src'))
-
-
-import re
 
 
 def nvidia_smi():
@@ -104,10 +94,6 @@ def nvidia_smi():
     res = re.findall(r'\s+(\d+)MiB', out)
     res = [int(val) for val in res]
     return res
-
-
-import numpy as np
-import keras.backend as K
 
 
 def count_weight(model):
@@ -165,14 +151,15 @@ def strip_consts(graph_def, max_const_size=32):
                 tensor.tensor_content = tf.compat.as_bytes("<stripped %d bytes>" % size)
     return strip_def
 
+
 def to_single_dir():
-    os.chdir( root_dir)
+    os.chdir(root_dir)
     for parent, dirnames, filenames in os.walk('output/tf_tmp'):
-        filenames=sorted(filenames)
-        for ind,fn in enumerate(filenames):
-            subprocess.call(('mkdir -p '+parent+'/'+str(ind)).split())
-            subprocess.call(('mv '+parent+'/'+fn+' '+parent+'/'+str(ind)+'/').split())
-        print parent,filenames
+        filenames = sorted(filenames)
+        for ind, fn in enumerate(filenames):
+            subprocess.call(('mkdir -p ' + parent + '/' + str(ind)).split())
+            subprocess.call(('mv ' + parent + '/' + fn + ' ' + parent + '/' + str(ind) + '/').split())
+        print parent, filenames
 
 
 if __name__ == "__main__":

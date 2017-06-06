@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import argparse
 import tensorflow as tf
-import keras.utils,keras
+import keras.utils, keras
 import numpy as np
 import os.path as osp
 # import tensorflow as tf
@@ -38,19 +38,8 @@ def parse_args():
 
 
 # args=parse_args()
-import logging, sys,json
 
-# logging.basicConfig(filename='output/net2net.log', level=logging.DEBUG)
-
-logger = logging.getLogger('net2net')
-logger.setLevel(logging.WARNING)
-
-ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.WARNING)
-formatter = logging.Formatter('%(asctime)s -  %(levelname)s -------- \n\t%(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-
+import sys, json
 
 class MyConfig(object):
     # for all model
@@ -63,28 +52,6 @@ class MyConfig(object):
     K.set_image_data_format("channels_last")
     # # for all model, but determined when init the first config
     cache_data = None
-
-    def to_json(self):
-        d=dict(name=self.name,
-             epochs=self.epochs,
-             verbose=self.verbose,
-             dbg=self.dbg)
-        with open(osp.join(self.output_path,'config.json')) as f :
-            json.dumps(f,d)
-        return
-
-    def copy(self, name='diff_name'):
-        new_config = MyConfig(self.epochs, self.verbose, self.dbg, name)
-        return new_config
-
-    def set_name(self, name,clean=True):
-        self.name = name
-        self.tf_log_path = osp.join(root_dir, 'output/tf_tmp/', name)
-        self.output_path = osp.join(root_dir, 'output/', name)
-        self.model_path=osp.join(root_dir,'output/',name,name+'.h5')
-        if clean:
-            Utils.mkdir_p(self.tf_log_path)
-            Utils.mkdir_p(self.output_path)
 
     def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True):
         # TODO check when name = 'default_name'
@@ -100,7 +67,7 @@ class MyConfig(object):
         self.evoluation_time = evoluation_time
 
         # for single model
-        self.set_name(name,clean=clean)
+        self.set_name(name, clean=clean)
         self.dbg = limit_data
         self.input_shape = (3, 32, 32) if K.image_data_format() == "Channels_first" else (32, 32, 3)
         self.nb_class = 10
@@ -110,15 +77,38 @@ class MyConfig(object):
         self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
                                             min_lr=0.5e-7)
         self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
-        self.csv_logger = CSVLogger(osp.join(root_dir, 'output', 'net2net.csv'))
-        self.limit_data=limit_data
+        self.set_logger_path(self.name+'.csv')
+        self.limit_data = limit_data
         # for all model, but determined when init the first config
         if limit_data:
             self.dataset = self.load_data(9999)
-            logger.setLevel(logging.INFO)  # TODO modify when release
         else:
             self.dataset = self.load_data(1)
-            logger.setLevel(logging.INFO)
+
+    def set_logger_path(self,name):
+        self.csv_logger=CSVLogger(osp.join(self.output_path, name))
+
+    def to_json(self):
+        d = dict(name=self.name,
+                 epochs=self.epochs,
+                 verbose=self.verbose,
+                 dbg=self.dbg)
+        with open(osp.join(self.output_path, 'config.json')) as f:
+            json.dumps(f, d)
+        return
+
+    def copy(self, name='diff_name'):
+        new_config = MyConfig(self.epochs, self.verbose, self.dbg, name)
+        return new_config
+
+    def set_name(self, name, clean=True):
+        self.name = name
+        self.tf_log_path = osp.join(root_dir, 'output/tf_tmp/', name)
+        self.output_path = osp.join(root_dir, 'output/', name)
+        self.model_path = osp.join(root_dir, 'output/', name, name + '.h5')
+        if clean:
+            Utils.mkdir_p(self.tf_log_path)
+            Utils.mkdir_p(self.output_path)
 
     def _preprocess_input(self, x, mean_image=None):
         x = x.reshape((-1,) + self.input_shape)

@@ -133,6 +133,6 @@ display = (0, 15 + 10, 30 + 10, 45 + 10)
 ax.legend([handle for i, handle in enumerate(handles) if i in display],
           [label for i, label in enumerate(labels) if i in display])
 # plt.show()
-plt.xlim([18,175])
-plt.ylim([0.77,0.875])
+plt.xlim([18, 175])
+plt.ylim([0.77, 0.875])
 plt.savefig("large.png")

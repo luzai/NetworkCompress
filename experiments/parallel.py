@@ -270,8 +270,9 @@ def example(sess, local_network, woker_id):
         #     print("woker ", woker_id, "epoch", epoch)
 
 
-import time, threading,subprocess
+import time, threading, subprocess
 import multiprocessing as mp
+
 subprocess.call('rm -rf tmp_tf'.split())
 # parallel = True
 res = []

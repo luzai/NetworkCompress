@@ -5,10 +5,10 @@ from init import *
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10
 from keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Input, Dropout, Activation, BatchNormalization, \
-    Convolution2D,Embedding
+    Convolution2D, Embedding
 from keras.models import Sequential, model_from_json, Model
 from keras.optimizers import SGD
-from keras.utils import np_utils,vis_utils
+from keras.utils import np_utils, vis_utils
 
 from keras.preprocessing.image import ImageDataGenerator
 from keras import backend as K
@@ -105,8 +105,9 @@ def load_data(dbg=False):
 
     return train_data, test_data
 
+
 # knowledge transfer algorithms
-def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init,help=None):
+def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init, help=None):
     '''Get initial weights for a wider conv2d layer with a bigger nb_filter,
     by 'random-pad' or 'net2wider'.
 
@@ -123,7 +124,7 @@ def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init,help
     '''
     # with open("debug.pkl", "w") as f:
     #     cPickle.dump([teacher_w1, teacher_b1, teacher_w2, new_width], f)
-    if len(teacher_w1.shape)==4 and len(teacher_w2.shape)==2 and help is not None:
+    if len(teacher_w1.shape) == 4 and len(teacher_w2.shape) == 2 and help is not None:
         n = new_width - teacher_w1.shape[0]
         index = np.random.randint(teacher_w1.shape[0], size=n)
         factors = np.bincount(index)[index] + 1
@@ -150,7 +151,7 @@ def wider_conv2d_weight(teacher_w1, teacher_b1, teacher_w2, new_width, init,help
         new_w_fc1 = np.concatenate([teacher_w2, new_w2 + noise], axis=0)
         new_w_fc1[index_fc, :] = new_w2
 
-        return new_w_conv1,new_b_conv1,new_w_fc1
+        return new_w_conv1, new_b_conv1, new_w_fc1
     else:
         assert teacher_w1.shape[3] == teacher_w2.shape[2], (
             'successive layers from teacher model should have compatible shapes')
@@ -277,11 +278,11 @@ def make_teacher_model(train_data, validation_data, nb_epoch, verbose):
     '''Train a simple CNN as teacher model.
     '''
     model = Sequential()
-    model.add(Conv2D(64,(3, 3), input_shape=input_shape,
+    model.add(Conv2D(64, (3, 3), input_shape=input_shape,
                      padding='same', name='conv1', activation="relu"))
     model.add(MaxPooling2D(name='pool1'))
     # model.add(Dropout(0.25,name='conv_drop1'))
-    model.add(Conv2D(64, (3,3), padding='same', name='conv2', activation="relu"))
+    model.add(Conv2D(64, (3, 3), padding='same', name='conv2', activation="relu"))
     model.add(MaxPooling2D(name='pool2'))
     # model.add(Dropout(0.25,name='conv_drop2'))
     model.add(Flatten(name='flatten'))
@@ -545,13 +546,14 @@ def make_wider_student_model(teacher_model,
     if new_type == "conv":
         next_new_name = new_type + str(new_ind + 1)
         if next_new_name not in [l.name for l in model.layers]:
-            next_new_name="fc1"
+            next_new_name = "fc1"
             w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
             w_conv2, b_conv2 = teacher_model.get_layer(next_new_name).get_weights()
             from operator import mul
-            print(reduce(mul,model.get_layer("pool2").get_output_shape_at(0)[-2:],1))
+            print(reduce(mul, model.get_layer("pool2").get_output_shape_at(0)[-2:], 1))
             new_w_conv1, new_b_conv1, new_w_conv2 = wider_conv2d_weight(
-                w_conv1, b_conv1, w_conv2, new_conv1_width, init ,reduce(mul,model.get_layer("pool2").get_output_shape_at(0)[-2:],1))
+                w_conv1, b_conv1, w_conv2, new_conv1_width, init,
+                reduce(mul, model.get_layer("pool2").get_output_shape_at(0)[-2:], 1))
             # TODO consider pool dropout
         else:
             w_conv1, b_conv1 = teacher_model.get_layer(new_name).get_weights()
