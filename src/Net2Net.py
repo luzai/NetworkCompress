@@ -216,7 +216,7 @@ class Net2Net(object):
         new_graph = model.graph.copy()
         new_node = new_graph.get_nodes(layer_name)[0]
         assert new_node.type == 'Conv2D', 'must wide a conv'
-        new_width = new_node.config['filters'] * width_ratio
+        new_width = int(new_node.config['filters'] * width_ratio) #width_raio maybe float, convert to int type
         new_node.config['filters'] = new_width
 
         logger.debug(new_graph.to_json())
@@ -344,7 +344,7 @@ class Net2Net(object):
 
 
 if __name__ == "__main__":
-    config = MyConfig(epochs=50, verbose=1, limit_data=False, name='before')
+    config = MyConfig(epochs=1, verbose=1, limit_data=True, name='before')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 16}],
                ["Conv2D", 'Conv2D2', {'filters': 64}],
                ["MaxPooling2D", 'maxpooling2d1', {}],
@@ -359,12 +359,18 @@ if __name__ == "__main__":
 
     model = net2net.deeper(before_model, config=config)
     model.comp_fit_eval()
+
     model = net2net.wider(model, config=config)
     model.comp_fit_eval()
+
+    '''
     model = net2net.add_skip(model, config=config)
     model.comp_fit_eval()
+
+    
     model = net2net.add_group(model, config=config)
     model.comp_fit_eval()
+    '''
     model.vis()
 
     '''

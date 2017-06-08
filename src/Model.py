@@ -9,6 +9,8 @@ from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Input, Activation
 from keras.models import Model
 from networkx.readwrite import json_graph
+from keras.layers.merge import Concatenate
+import keras.backend as K
 
 import Utils
 from Config import MyConfig
