@@ -22,20 +22,19 @@ Contributor: @luzai, @miibotree
 - [ ] more operation  
 
 @miibotree
-- [ ] Consider wider a layer whose successor is skip structure. 
-- [ ] Weight intialization of skip. 
+- [x] The ratio of widening propto depth 
+- [x] finish add group function, and rand select group number in [2,3,4,5] 
+- [ ] test different way to initialize group layer's weights.(for example, use identity)
+- [ ] skip layer use add operation, skip layer use 1 * 1 conv to keep the same channel number.
 - [ ] The propobility of adding Maxpooling layer inversely propto depth (constrain the number of MaxPooling layers)
-- [ ] The ratio of widening propto depth 
 - [ ] Propobility of 5 mutation operations 
-- [ ] group rand select in [1,2,4,8], initialize the weights.
 - [ ] BN and ReLU
  
 - [ ] wider_conv, deeper_conv
     - [ ] New compy weight method 'Resize3D'(numpy?)
     - [ ] Dropout
     - [ ] BN (principle?)
-- [ ] skip
-    - [ ] DAG and topological sort
+
 - [ ] Distribute/ parallel Training
 - [x] Mayavi
 - [x] Summary at running time
