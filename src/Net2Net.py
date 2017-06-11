@@ -12,6 +12,13 @@ from keras.utils.conv_utils import convert_kernel
 from Config import MyConfig
 from Logger import  logger
 from Model import MyModel, MyGraph, Node
+import networkx as nx
+
+
+# TODO: put these two variables to config ?
+# The ratio of widening propto depth
+max_width_ratio = 4
+max_depth = 20
 
 
 class Net2Net(object):
@@ -39,8 +46,9 @@ class Net2Net(object):
         return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config)
 
     def wider(self, model, config):
+        topo_nodes = nx.topological_sort(model.graph)
         names = [node.name
-                 for node in model.graph.nodes()
+                 for node in topo_nodes
                  if node.type == 'Conv2D']
 
         model_conv_depth = len(names)
@@ -48,16 +56,11 @@ class Net2Net(object):
         # random choose a layer to wider, except last conv layer
         choice = names[np.random.randint(0, len(names) - 1)]
 
-        # The ratio of widening propto depth
-        #TODO: put these two variables to config ?
-        max_width_ratio = 4
-        max_depth = 20
         width_ratio = (1.0 * (max_width_ratio - 1) * model_conv_depth / max_depth) + 1.0
 
         return self.wider_conv2d(model, layer_name = choice, width_ratio = width_ratio, config = config)
 
     def add_skip(self, model, config):
-        import networkx as nx
         assert nx.is_directed_acyclic_graph(model.graph)
         topo_nodes = nx.topological_sort(model.graph)
 
@@ -87,14 +90,14 @@ class Net2Net(object):
 
     #add group operation
     def add_group(self, model, config):
-
+        topo_nodes = nx.topological_sort(model.graph)
         names = [node.name
-                 for node in model.graph.nodes()
-                 if node.type == 'Conv2D']
+                 for node in topo_nodes
+                 if node.type == 'Conv2D' or node.type == 'Group']
 
         #random choose a layer to concat a group operation
-        choice = names[np.random.randint(0, len(names))]
-        group_num = np.random.randint(2, 5)
+        choice = names[np.random.randint(0, len(names) - 1)]
+        group_num = np.random.randint(2, 5) #group number: [2, 3, 4]
 
         # add node and edge to the graph
         new_graph = model.graph.copy()
@@ -105,14 +108,16 @@ class Net2Net(object):
                    str(
                        1 + max(new_graph.type2ind.get('Group', [0]))
                    )
-        new_node = Node(type='Group', name=new_name, config={'group_num' : group_num})
+
+        filters = node.config['filters']
+        new_node = Node(type='Group', name=new_name, config={'group_num' : group_num, 'filters' : filters})
         new_graph.add_node(new_node)
         new_graph.remove_edge(node, node_suc)
         new_graph.add_edge(node, new_node)
         new_graph.add_edge(new_node, node_suc)
         new_model = MyModel(config=config, graph=new_graph)
 
-        #self.copy_weight(model, new_model)
+        self.copy_weight(model, new_model)
         return new_model
 
 
@@ -357,18 +362,17 @@ if __name__ == "__main__":
 
     net2net = Net2Net()
 
+    model = net2net.add_group(before_model, config=config)
+    model.comp_fit_eval()
+
+    '''
     model = net2net.deeper(before_model, config=config)
     model.comp_fit_eval()
 
     model = net2net.wider(model, config=config)
     model.comp_fit_eval()
 
-    '''
     model = net2net.add_skip(model, config=config)
-    model.comp_fit_eval()
-
-    
-    model = net2net.add_group(model, config=config)
     model.comp_fit_eval()
     '''
     model.vis()

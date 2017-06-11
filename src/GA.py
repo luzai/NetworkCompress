@@ -38,18 +38,18 @@ class GA(object):
         init_model_index = random.randint(1, 4)
 
         if init_model_index == 1:  # one conv layer with kernel num = 64
-            stem_conv_1 = Conv2D(64, 3, padding='same', name='conv2d1')(input_data)
+            stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
 
         elif init_model_index == 2:  # two conv layers with kernel num = 64
-            stem_conv_0 = Conv2D(64, 3, padding='same', name='conv2d1')(input_data)
-            stem_conv_1 = Conv2D(64, 3, padding='same', name='conv2d2')(stem_conv_0)
+            stem_conv_0 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
+            stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d2')(stem_conv_0)
 
         elif init_model_index == 3:  # one conv layer with a wider kernel num = 128
-            stem_conv_1 = Conv2D(128, 3, padding='same', name='conv2d2')(input_data)
+            stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
 
         elif init_model_index == 4:  # two conv layers with a wider kernel_num = 128
-            stem_conv_0 = Conv2D(128, 3, padding='same', name='conv2d1')(input_data)
-            stem_conv_1 = Conv2D(128, 3, padding='same', name='conv2d2')(stem_conv_0)
+            stem_conv_0 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
+            stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d2')(stem_conv_0)
         import keras
         stem_conv_1 = keras.layers.MaxPooling2D(name='maxpooling2d1')(stem_conv_1)
         stem_conv_1 = Conv2D(10, 3, padding='same', name='conv2d3')(stem_conv_1)
@@ -98,7 +98,7 @@ class GA(object):
             new_config = self.get_curr_config()
             suceeded = False
             while not suceeded:
-                evolution_choice_list = ['deeper']  # , 'wider','add_skip']
+                evolution_choice_list = ['deeper', 'wider', 'add_skip', 'add_group']
                 evolution_choice = np.random.choice(evolution_choice_list, 1)[0]
                 logger.info("evolution choice {}".format(evolution_choice))
                 try:
@@ -110,6 +110,9 @@ class GA(object):
                         suceeded = True
                     elif evolution_choice == 'add_skip':
                         after_model = self.net2net.add_skip(before_model, config=new_config)
+                        suceeded = True
+                    elif evolution_choice == 'add_group':
+                        after_model = self.net2net.add_group(before_model, config=new_config)
                         suceeded = True
                 except Exception as inst:
                     print inst
@@ -165,15 +168,23 @@ class GA(object):
             self.population[config.name] = MyModel(config=config, graph=graph)
             self.max_ind += 1
         for i in range(self.gl_config.evoluation_time):
-            logger.info("Now {} evolution ".format(i))
+            logger.info("Now {} evolution ".format(i + 1))
             self.mutation_process()
-            self.train_process()
             self.select_process()
+            self.train_process()
+
 
     def select_process(self):
+        '''
+        #for debug, just keep the latest evolutioned model
+        self.population = Utils.choice_dict_keep_latest(self.population, self.nb_inv)
+        return
+        '''
+
         for model in self.population.values():
             assert hasattr(model, 'score'), 'to eval we need score'
         self.population = Utils.choice_dict(self.population, self.nb_inv)
+
         if len(np.unique(self.population.keys())) == self.nb_inv:
             logger.warning("!warning: sample without replacement")
 
@@ -183,11 +194,11 @@ if __name__ == "__main__":
     dbg = False
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=3)
-        nb_inv = 3
+        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=5)
+        nb_inv = 1
     else:
         parallel = False
-        gl_config = MyConfig(epochs=10, verbose=2, limit_data=False, name='ga', evoluation_time=3)
-        nb_inv = 3
+        gl_config = MyConfig(epochs=10, verbose=2, limit_data=False, name='ga', evoluation_time=5)
+        nb_inv = 1
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()

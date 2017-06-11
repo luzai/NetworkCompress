@@ -29,6 +29,18 @@ def choice_dict(mdict, size):
     choice = np.random.choice(mdict.keys(), size=size, replace=False)
     return {name: model for name, model in mdict.items() if name in choice}
 
+def choice_dict_keep_latest(mdict, size):
+    import re
+    #find the max ind model
+    max_ind = 0
+    for name, model in mdict.items():
+        iter, ind =  filter(str.isdigit, name)
+
+        if ind > max_ind:
+            max_ind = ind
+            latest = {name : model}
+    return latest
+
 
 # descrapted
 def dict2list(mdict):

@@ -6,14 +6,13 @@ import time
 
 import numpy as np
 import os.path as osp
-
+from Model import IdentityConv, GroupIdentityConv
 from Logger import logger
 
 dbg = False
 root_dir = osp.normpath(
     osp.join(osp.dirname(__file__), "..")
 )
-
 
 def run(queue, name, epochs=100, verbose=1, limit_data=False):
 
@@ -22,6 +21,10 @@ def run(queue, name, epochs=100, verbose=1, limit_data=False):
         import tensorflow as tf
         from Config import MyConfig
         from Model import MyModel
+        from keras.utils.generic_utils import get_custom_objects
+
+        get_custom_objects()['IdentityConv'] = IdentityConv
+        get_custom_objects()['GroupIdentityConv'] = GroupIdentityConv
 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -37,12 +40,12 @@ def run(queue, name, epochs=100, verbose=1, limit_data=False):
     except Exception as inst:
         print 'INST is'
         print str(inst)
-        errors = ['ResourceExhaustedError', 'Resource exhausted: OOM', 'OOM' ,'Failed to create session'   
-                  'CUDNN_STATUS_INTERNAL_ERROR', 'Chunk','CUDA_ERROR_OUT_OF_MEMORY']
+        errors = ['ResourceExhaustedError', 'Resource exhausted: OOM', 'OOM' ,'Failed to create session'
+                   'CUDNN_STATUS_INTERNAL_ERROR', 'Chunk','CUDA_ERROR_OUT_OF_MEMORY']
         for error in errors:
             if error in str(inst):
-                queue.put((None, None))
-                exit(100)
+                 queue.put((None, None))
+                 exit(100)
         exit(200)
 
 

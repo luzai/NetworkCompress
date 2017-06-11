@@ -11,11 +11,62 @@ from keras.models import Model
 from networkx.readwrite import json_graph
 from keras.layers.merge import Concatenate
 import keras.backend as K
+from keras.utils.conv_utils import convert_kernel
+from keras.initializers import Initializer
 
 import Utils
 from Config import MyConfig
 from Logger import logger
 
+
+
+class IdentityConv(Initializer):
+    def __call__(self, shape, dtype=None):
+        assert K.image_data_format() == 'channels_last'
+        # kw,kh,num_channel,filters
+        if len(shape) == 1:
+            return K.tensorflow_backend.constant(0., dtype=dtype, shape=shape)
+        elif len(shape) == 2 and shape[0] == shape[1]:
+            return K.tensorflow_backend.constant(np.identity(shape[0], dtype))
+        elif len(shape) == 4 and shape[2] == shape[3]:
+            array = np.zeros(shape, dtype=float)
+            cx, cy = shape[0] / 2, shape[1] / 2
+            for i in range(shape[2]):
+                array[cx, cy, i, i] = 1
+            return K.tensorflow_backend.constant(array, dtype=dtype)
+        elif len(shape) == 4 and shape[2] != shape[3]:
+            array = np.zeros(shape, dtype=float)
+            cx, cy = (shape[0] - 1) // 2, (shape[1] - 1) // 2
+            for i in range(min(shape[2], shape[3])):
+                array[cx, cy, i, i] = 1
+            return K.tensorflow_backend.constant(array, dtype=dtype)
+        else:
+            raise Exception("no handler")
+
+
+class GroupIdentityConv(Initializer):
+
+    def __init__(self, idx, group_num):
+        self.idx = idx
+        self.group_num = group_num
+
+    def __call__(self, shape, dtype=None):
+        assert K.image_data_format() == 'channels_last'
+        # kw,kh,num_channel,filters
+
+        array = np.zeros(shape, dtype=float)
+        cx, cy = (shape[0] - 1) // 2, (shape[1] - 1) // 2
+        cnt = 0
+        for i in range(self.idx * shape[3], (self.idx + 1) * shape[3]):
+            array[cx, cy, i, cnt] = 1
+            cnt = cnt + 1
+        return K.tensorflow_backend.constant(array, dtype=dtype)
+
+    def get_config(self):
+        return {
+            'idx': self.idx,
+            'group_num': self.group_num
+        }
 
 class Node(object):
     def __init__(self, type, name, config):
@@ -105,15 +156,13 @@ class MyGraph(nx.DiGraph):
         self.add_edge(node, new_node)
         self.add_edge(new_node, next_node)
 
-
-    def group_layer(self, input_tensor, group_num):
+    def group_layer(self, input_tensor, group_num, filters, name):
         def f(input):
             group_output = []
-
             for i in range(group_num):
-                #TODO: use identity kernel. Initilizers's Identity can not work
-                tower = Conv2D(120, (1, 1), padding='same', activation='relu')(input_tensor)
-                tower = Conv2D(120 / group_num, (3, 3), padding='same', activation='relu')(tower)
+                #add name: group_idx1_conv_idx2
+                tower = Conv2D(filters / group_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same', kernel_initializer=GroupIdentityConv(i, group_num))(input_tensor)
+                tower = Conv2D(filters / group_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same', kernel_initializer=IdentityConv())(tower)
                 group_output.append(tower)
 
             if K.image_data_format() == 'channels_first':
@@ -154,7 +203,7 @@ class MyGraph(nx.DiGraph):
                                    activation='relu')
 
                 elif node.type == 'Group':
-                    layer = self.group_layer(layer_input_tensor, group_num = node.config['group_num'])
+                    layer = self.group_layer(layer_input_tensor, name = node.name, group_num = node.config['group_num'], filters = node.config['filters'])
 
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)
@@ -318,7 +367,7 @@ if __name__ == "__main__":
     else:
         config = MyConfig(epochs=100, verbose=1, limit_data=dbg, name='model_test')
     model_l = [["Conv2D", 'conv1', {'filters': 16}],
-               ["Conv2D", 'conv2', {'filters': 64}],
+               ["Group", 'group1', {'group_num': 4}],
                ["Conv2D", 'conv3', {'filters': 10}],
                ['GlobalMaxPooling2D', 'gmpool1', {}],
                ['Activation', 'activation1', {'activation_type': 'softmax'}]]
