@@ -8,12 +8,11 @@ import numpy as np
 import scipy
 import scipy.ndimage
 from keras.utils.conv_utils import convert_kernel
-
+from Utils import vis_graph, vis_model
 from Config import MyConfig
-from Logger import  logger
+from Logger import logger
 from Model import MyModel, MyGraph, Node
 import networkx as nx
-
 
 # TODO: put these two variables to config ?
 # The ratio of widening propto depth
@@ -36,12 +35,11 @@ class Net2Net(object):
                  if node.type == 'Conv2D']
 
         while True:
-
             choice = names[np.random.randint(0, len(names))]
             next_nodes = model.graph.get_nodes(choice, next_layer=True, last_layer=False)
             if 'GlobalMaxPooling2D' not in [node.type for node in next_nodes]:
                 break
-
+        logger.info('choose {} to deeper'.format(choice))
         # grow
         return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config)
 
@@ -57,21 +55,21 @@ class Net2Net(object):
         choice = names[np.random.randint(0, len(names) - 1)]
 
         width_ratio = (1.0 * (max_width_ratio - 1) * model_conv_depth / max_depth) + 1.0
-
-        return self.wider_conv2d(model, layer_name = choice, width_ratio = width_ratio, config = config)
+        logger.info('choose {} to wider'.format(choice))
+        return self.wider_conv2d(model, layer_name=choice, width_ratio=width_ratio, config=config)
 
     def add_skip(self, model, config):
         assert nx.is_directed_acyclic_graph(model.graph)
         topo_nodes = nx.topological_sort(model.graph)
 
         names = [node.name for node in topo_nodes
-                      if node.type == 'Conv2D']
+                 if node.type == 'Conv2D']
 
         if len(names) == 1:
             return model
 
-        #find two conjacent conv nodes, which hasn't add skip yet
-        max_iter = 1000
+        # find two conjacent conv nodes, which hasn't add skip yet
+        max_iter = 100
         for i in range(max_iter + 1):
             if i == max_iter:
                 return model
@@ -88,21 +86,21 @@ class Net2Net(object):
 
         return self.skip(model, from_name, to_name, config)
 
-    #add group operation
+    # add group operation
     def add_group(self, model, config):
         topo_nodes = nx.topological_sort(model.graph)
         names = [node.name
                  for node in topo_nodes
                  if node.type == 'Conv2D' or node.type == 'Group']
 
-        #random choose a layer to concat a group operation
+        # random choose a layer to concat a group operation
         choice = names[np.random.randint(0, len(names) - 1)]
-        group_num = np.random.randint(2, 5) #group number: [2, 3, 4]
+        group_num = np.random.randint(2, 5)  # group number: [2, 3, 4]
 
         # add node and edge to the graph
         new_graph = model.graph.copy()
         node = new_graph.get_nodes(choice)[0]
-        node_suc = new_graph.get_nodes(choice, next_layer = True)[0]
+        node_suc = new_graph.get_nodes(choice, next_layer=True)[0]
         new_graph.update()
         new_name = 'Group' + \
                    str(
@@ -110,7 +108,7 @@ class Net2Net(object):
                    )
 
         filters = node.config['filters']
-        new_node = Node(type='Group', name=new_name, config={'group_num' : group_num, 'filters' : filters})
+        new_node = Node(type='Group', name=new_name, config={'group_num': group_num, 'filters': filters})
         new_graph.add_node(new_node)
         new_graph.remove_edge(node, node_suc)
         new_graph.add_edge(node, new_node)
@@ -119,7 +117,6 @@ class Net2Net(object):
 
         self.copy_weight(model, new_model)
         return new_model
-
 
     def maxpool_by_name(self, model, name, config):
         new_graph = model.graph.copy()
@@ -186,11 +183,11 @@ class Net2Net(object):
         node2 = new_graph.get_nodes(to_name)[0]
         node3 = new_graph.get_nodes(to_name, next_layer=True)[0]
         new_graph.update()
-        new_name = 'Concatenate' + \
+        new_name = 'Add' + \
                    str(
-                       1 + max(new_graph.type2ind.get('Concatenate', [0]))
+                       1 + max(new_graph.type2ind.get('Add', [0]))
                    )
-        new_node = Node(type='Concatenate', name=new_name, config={})
+        new_node = Node(type='Add', name=new_name, config={})
         new_graph.add_node(new_node)
         new_graph.remove_edge(node2, node3)
         new_graph.add_edge(node1, new_node)
@@ -201,9 +198,9 @@ class Net2Net(object):
         self.copy_weight(model, new_model)
 
         # Way 1
-        w, b = new_model.get_layers(node2.name)[0].get_weights()
-        w, b = Net2Net.rand_weight_like(w)
-        new_model.get_layers(node2.name)[0].set_weights((w, b))
+        # w, b = new_model.get_layers(node2.name)[0].get_weights()
+        # w, b = Net2Net.rand_weight_like(w)
+        # new_model.get_layers(node2.name)[0].set_weights((w, b))
 
         # way 2 do nothing
 
@@ -221,23 +218,23 @@ class Net2Net(object):
         new_graph = model.graph.copy()
         new_node = new_graph.get_nodes(layer_name)[0]
         assert new_node.type == 'Conv2D', 'must wide a conv'
-        new_width = int(new_node.config['filters'] * width_ratio) #width_raio maybe float, convert to int type
+        new_width = int(new_node.config['filters'] * width_ratio)  # width_raio maybe float, convert to int type
         new_node.config['filters'] = new_width
 
         logger.debug(new_graph.to_json())
         # construct model
         new_model = MyModel(config=config, graph=new_graph)
-
+        self.copy_weight(model, new_model)
         # inherit weight
         w_conv1, b_conv1 = model.get_layers(layer_name)[0].get_weights()
-        w_conv2, b_conv2 = model.get_layers(layer_name, next_layer=True)[0].get_weights()
+        w_conv2, b_conv2 = model.get_layers(layer_name, next_layer=True, type='Conv2D')[0].get_weights()
 
         new_w_conv1, new_b_conv1, new_w_conv2 = Net2Net._wider_conv2d_weight(
             w_conv1, b_conv1, w_conv2, new_width, "net2wider")
 
         new_model.get_layers(layer_name)[0].set_weights([new_w_conv1, new_b_conv1])
-        new_model.get_layers(layer_name, next_layer=True)[0].set_weights([new_w_conv2, b_conv2])
-        self.copy_weight(model, new_model)
+        new_model.get_layers(layer_name, next_layer=True, type='Conv2D')[0].set_weights([new_w_conv2, b_conv2])
+
         return new_model
 
     def deeper_conv2d(self, model, layer_name, config, kernel_size=3, filters='same'):
@@ -300,15 +297,15 @@ class Net2Net(object):
 
         if K.image_data_format() == "channels_last":
             _teacher_w1 = convert_kernel(teacher_w1)
-
             _teacher_w2 = convert_kernel(teacher_w2)
         else:
             _teacher_w1 = teacher_w1
-
             _teacher_w2 = teacher_w2
+
         _teacher_b1 = teacher_b1
         assert _teacher_w1.shape[3] == _teacher_w2.shape[2], (
-            'successive layers from teacher model should have compatible shapes')
+            'successive layers from teacher model should have compatible shapes ' +
+            ' all shape is {} {} {}'.format(_teacher_w1.shape, _teacher_w2.shape, _teacher_b1.shape))
         assert _teacher_w1.shape[3] == _teacher_b1.shape[0], (
             'weight and bias from same layer should have compatible shapes')
         assert new_width > _teacher_w1.shape[3], (
@@ -362,19 +359,20 @@ if __name__ == "__main__":
 
     net2net = Net2Net()
 
-    model = net2net.add_group(before_model, config=config)
+    model = net2net.deeper(before_model, config=config.copy('deeper1'))
+    model = net2net.deeper_conv2d(before_model, layer_name='Conv2D2', config=config.copy('deeper1'))
+    # model = net2net.wider_conv2d(model, layer_name='Conv2D2', width_ratio=2, config=config.copy('wide'))
     model.comp_fit_eval()
 
-    '''
-    model = net2net.deeper(before_model, config=config)
+    # model = net2net.wider(model, config=config)
     model.comp_fit_eval()
 
-    model = net2net.wider(model, config=config)
+    model = net2net.add_skip(model, config=config.copy('skip1'))
     model.comp_fit_eval()
 
-    model = net2net.add_skip(model, config=config)
+    model = net2net.add_group(model, config=config)
     model.comp_fit_eval()
-    '''
+
     model.vis()
 
     '''

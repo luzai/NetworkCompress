@@ -14,8 +14,8 @@ root_dir = osp.normpath(
     osp.join(osp.dirname(__file__), "..")
 )
 
-def run(queue, name, epochs=100, verbose=1, limit_data=False):
 
+def run(queue, name, epochs=100, verbose=1, limit_data=False, dataset_type='cifar10'):
     try:
         import keras
         import tensorflow as tf
@@ -30,7 +30,8 @@ def run(queue, name, epochs=100, verbose=1, limit_data=False):
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
         with sess.as_default():
-            config = MyConfig(name=name, epochs=epochs, verbose=verbose, clean=False, limit_data=limit_data)
+            config = MyConfig(name=name, epochs=epochs, verbose=verbose, clean=False, limit_data=limit_data,
+                              dataset_type=dataset_type)
             # device = 0
             # with tf.device(device):
             model = MyModel(config=config, model=keras.models.load_model(config.model_path))
@@ -40,16 +41,16 @@ def run(queue, name, epochs=100, verbose=1, limit_data=False):
     except Exception as inst:
         print 'INST is'
         print str(inst)
-        errors = ['ResourceExhaustedError', 'Resource exhausted: OOM', 'OOM' ,'Failed to create session'
-                   'CUDNN_STATUS_INTERNAL_ERROR', 'Chunk','CUDA_ERROR_OUT_OF_MEMORY']
+        errors = ['ResourceExhaustedError', 'Resource exhausted: OOM', 'OOM', 'Failed to create session'
+                'CUDNN_STATUS_INTERNAL_ERROR', 'Chunk','CUDA_ERROR_OUT_OF_MEMORY']
         for error in errors:
             if error in str(inst):
-                 queue.put((None, None))
-                 exit(100)
+                queue.put((None, None))
+                exit(100)
         exit(200)
 
 
-def run_self(queue, name, epochs=100, verbose=1, limit_data=False):
+def run_self(queue, name, epochs=100, verbose=1, limit_data=False, dataset_type='cifar10'):
     PATH = "/new_disk_1/luzai/App/mpy/bin:"
     os.environ['PATH'] = PATH + os.environ['PATH']
     # subprocess.call("which python".split())
@@ -62,7 +63,8 @@ def run_self(queue, name, epochs=100, verbose=1, limit_data=False):
                                    + " -n " + name +
                                    " -e " + str(epochs) +
                                    " -v " + str(verbose) +
-                                   " -l " + str(int(limit_data))).split(),
+                                   " -l " + str(int(limit_data)) +
+                                   " -d " + dataset_type).split(),
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                   env=my_env)
         # subprocess.call(("python " + osp.join(root_dir, 'src', 'GAClient.py')
@@ -70,9 +72,9 @@ def run_self(queue, name, epochs=100, verbose=1, limit_data=False):
         #                            " -e " + str(epochs) +
         #                            " -v " + str(verbose)).split())
         returncode = child1.wait()
-        logger.info( 'returncode is {}'.format(returncode))
+        logger.info('returncode is {}'.format(returncode))
         stdout, stderr = child1.communicate()
-        if  returncode == 100 or returncode==-6:
+        if returncode == 100 or returncode == -6:
             logger.info('No enough mem, model {} wait for 5min'.format(name))
             if dbg:
                 time.sleep(10)
@@ -100,6 +102,7 @@ def parse_args():
     parser.add_argument('-e', dest='epochs', type=int)
     parser.add_argument('-v', dest='verbose', type=int)
     parser.add_argument('-l', dest='limit_data', type=int)
+    parser.add_argument('-d', dest='dataset_type', type=str)
     args = parser.parse_args()
 
     return args
@@ -111,7 +114,8 @@ if __name__ == '__main__':
     with open('gaclient', 'w') as f:
         f.write(str(args))
 
-    run(queue=main_queue, name=args.name, epochs=args.epochs, verbose=args.verbose, limit_data=args.limit_data)
+    run(queue=main_queue, name=args.name, epochs=args.epochs, verbose=args.verbose, limit_data=args.limit_data,
+        dataset_type=args.dataset_type)
     d = main_queue.get()
     print 'NAME: ', d[0]
     print 'SCORE: {:.13f}'.format(d[1])

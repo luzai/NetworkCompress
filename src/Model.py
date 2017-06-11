@@ -13,11 +13,10 @@ from keras.layers.merge import Concatenate
 import keras.backend as K
 from keras.utils.conv_utils import convert_kernel
 from keras.initializers import Initializer
-
 import Utils
+from Utils import vis_graph, vis_model
 from Config import MyConfig
 from Logger import logger
-
 
 
 class IdentityConv(Initializer):
@@ -45,7 +44,6 @@ class IdentityConv(Initializer):
 
 
 class GroupIdentityConv(Initializer):
-
     def __init__(self, idx, group_num):
         self.idx = idx
         self.group_num = group_num
@@ -67,6 +65,7 @@ class GroupIdentityConv(Initializer):
             'idx': self.idx,
             'group_num': self.group_num
         }
+
 
 class Node(object):
     def __init__(self, type, name, config):
@@ -116,12 +115,21 @@ class MyGraph(nx.DiGraph):
 
             self.add_path(_nodes)
 
-    def get_nodes(self, name, next_layer=False, last_layer=False):
-        name2node = {node.name: node for node in self.nodes()}
+    def get_nodes(self, name, next_layer=False, last_layer=False, type=None):
+        if type is None:
+            name2node = {node.name: node for node in self.nodes()}
+        else:
+            name2node = {node.name: node for node in self.nodes() if node.type == type}
         assert name in name2node.keys(), " Name must be uniqiue"
         node = name2node[name]
         if next_layer:
-            return self.successors(node)
+            if type is None:
+                return self.successors(node)
+            else:
+                dfs_list = nx.dfs_successors(self, node)
+                dfs_list = [_node for _node in dfs_list if _node.type == type]
+                dfs_list
+                return [dfs_list[0]]
         elif last_layer:
             return self.predecessors(node)
         else:
@@ -160,9 +168,11 @@ class MyGraph(nx.DiGraph):
         def f(input):
             group_output = []
             for i in range(group_num):
-                #add name: group_idx1_conv_idx2
-                tower = Conv2D(filters / group_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same', kernel_initializer=GroupIdentityConv(i, group_num))(input_tensor)
-                tower = Conv2D(filters / group_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same', kernel_initializer=IdentityConv())(tower)
+                # add name: group_idx1_conv_idx2
+                tower = Conv2D(filters / group_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same',
+                               kernel_initializer=GroupIdentityConv(i, group_num))(input)
+                tower = Conv2D(filters / group_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same',
+                               kernel_initializer=IdentityConv())(tower)
                 group_output.append(tower)
 
             if K.image_data_format() == 'channels_first':
@@ -172,6 +182,7 @@ class MyGraph(nx.DiGraph):
             output = Concatenate(axis=axis)(group_output)
 
             return output
+
         return f
 
     def to_model(self, input_shape, graph, name="default_for_op"):
@@ -201,9 +212,9 @@ class MyGraph(nx.DiGraph):
 
                     layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
                                    activation='relu')
-
                 elif node.type == 'Group':
-                    layer = self.group_layer(layer_input_tensor, name = node.name, group_num = node.config['group_num'], filters = node.config['filters'])
+                    layer = self.group_layer(layer_input_tensor, name=node.name, group_num=node.config['group_num'],
+                                             filters=node.config['filters'])
 
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)
@@ -216,14 +227,34 @@ class MyGraph(nx.DiGraph):
                     layer = Activation(activation=activation_type, name=node.name)
                 layer_output_tensor = layer(layer_input_tensor)
             else:
-                # TODO Add
                 layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
-                if node.type == 'Concatenate':
-                    # handle shape
-                    # Either switch to ROIPooling or MaxPooling
-                    # TODO consider ROIPooling
-                    import keras.backend as K
+                if node.type == 'Add':
+                    # todo also test multiply
+                    assert K.image_data_format() == 'channels_last'
+                    ori_shapes = [ktf.int_shape(layer_input_tensor)[1:3]
+                                  for layer_input_tensor in layer_input_tensors]
+                    ori_shapes = np.array(ori_shapes)
+                    new_shape = ori_shapes.min(axis=0)
+                    ori_chnls = [ktf.int_shape(layer_input_tensor)[3]
+                                 for layer_input_tensor in layer_input_tensors]
+                    ori_chnls = np.array(ori_chnls)
+                    new_chnl = ori_chnls.min()
 
+                    for ind, layer_input_tensor, ori_shape in \
+                            zip(range(len(layer_input_tensors)), layer_input_tensors, ori_shapes):
+                        diff_shape = ori_shape - new_shape
+                        if diff_shape.all():
+                            diff_shape += 1
+                            layer_input_tensors[ind] = \
+                                keras.layers.MaxPool2D(pool_size=diff_shape, strides=1, name=node.name + '_maxpool2d')(
+                                    layer_input_tensor)
+                        if ori_chnls[ind] > new_chnl:
+                            layer_input_tensors[ind] = \
+                                Conv2D(filters=new_chnl, kernel_size=ori_chnls[ind], padding='same',
+                                       name=node.name + '_conv2d')(layer_input_tensor)
+                        layer = keras.layers.Add()
+
+                if node.type == 'Concatenate':
                     if K.image_data_format() == "channels_last":
                         (width_ind, height_ind, chn_ind) = (1, 2, 3)
                     else:
@@ -241,11 +272,10 @@ class MyGraph(nx.DiGraph):
                             diff_shape += 1
                             layer_input_tensors[ind] = \
                                 keras.layers.MaxPool2D(pool_size=diff_shape, strides=1)(layer_input_tensor)
-
-                    def div2(x):
-                        return x / 2.
-
-                    layer_input_tensors = [keras.layers.Lambda(div2)(tensor) for tensor in layer_input_tensors]
+                    # todo custom div layer
+                    # def div2(x):
+                    #     return x / 2.
+                    # layer_input_tensors = [keras.layers.Lambda(div2)(tensor) for tensor in layer_input_tensors]
                     layer = keras.layers.Concatenate(axis=chn_ind)
                 layer_output_tensor = layer(layer_input_tensors)
 
@@ -290,13 +320,16 @@ class MyModel(object):
         else:
             self.model = model
 
-    def get_layers(self, name, next_layer=False, last_layer=False):
-        name2layer = {layer.name: layer for layer in self.model.layers}
+    def get_layers(self, name, next_layer=False, last_layer=False, type=None):
+        if type is None:
+            name2layer = {layer.name: layer for layer in self.model.layers}
+        else:
+            name2layer = {layer.name: layer for layer in self.model.layers if type.lower() in layer.name.lower()}
 
         def _get_layer(name):
             return name2layer[name]
 
-        nodes = self.graph.get_nodes(name, next_layer, last_layer)
+        nodes = self.graph.get_nodes(name, next_layer, last_layer, type=type)
         if not isinstance(nodes, list):
             nodes = [nodes]
         return map(_get_layer, [node.name for node in nodes])
@@ -343,14 +376,9 @@ class MyModel(object):
                                                                                  non_trainable_count))
 
     def comp_fit_eval(self):
-        # assert tf.get_default_graph() is self.config.tf_graph, "graph same"
-        # with self.config.tf_graph.as_default():
-        #     with tf.name_scope(self.config.name):
+
         self.compile()
         self.vis()
-        # with self.config.sess.as_default():
-        #     assert tf.get_default_graph() is self.config.tf_graph, "graph same"
-        #     with tf.name_scope(self.config.name):
         hist = self.fit()
 
         score = self.evaluate()
@@ -360,14 +388,13 @@ class MyModel(object):
 
 
 if __name__ == "__main__":
-
     dbg = True
     if dbg:
         config = MyConfig(epochs=1, verbose=1, limit_data=dbg, name='model_test')
     else:
         config = MyConfig(epochs=100, verbose=1, limit_data=dbg, name='model_test')
     model_l = [["Conv2D", 'conv1', {'filters': 16}],
-               ["Group", 'group1', {'group_num': 4}],
+               ["Group", 'group1', {'group_num': 4, 'filters': 16}],
                ["Conv2D", 'conv3', {'filters': 10}],
                ['GlobalMaxPooling2D', 'gmpool1', {}],
                ['Activation', 'activation1', {'activation_type': 'softmax'}]]

@@ -136,7 +136,8 @@ class GA(object):
                 name=model.config.name,
                 epochs=model.config.epochs,
                 verbose=model.config.verbose,
-                limit_data=model.config.limit_data
+                limit_data=model.config.limit_data,
+                dataset_type=model.config.dataset_type
             )
             if parallel:
                 c = mp.Process(target=GAClient.run_self, kwargs=d)
@@ -173,13 +174,10 @@ class GA(object):
             self.select_process()
             self.train_process()
 
-
     def select_process(self):
-        '''
-        #for debug, just keep the latest evolutioned model
+        # for debug, just keep the latest evolutioned model
         self.population = Utils.choice_dict_keep_latest(self.population, self.nb_inv)
         return
-        '''
 
         for model in self.population.values():
             assert hasattr(model, 'score'), 'to eval we need score'

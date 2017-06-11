@@ -139,5 +139,6 @@ class MyConfig(object):
             MyConfig.cache_data = res
         self.dataset = MyConfig.cache_data
 
-if __name__ =='__main__':
-    config=MyConfig(epochs=1, verbose=2, limit_data=False, name='ga', evoluation_time=3,dataset_type='mnist')
+
+if __name__ == '__main__':
+    config = MyConfig(epochs=1, verbose=2, limit_data=False, name='ga', evoluation_time=3, dataset_type='mnist')
