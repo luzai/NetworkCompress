@@ -16,10 +16,11 @@ Contributor: @luzai, @miibotree
 @luzai  
 - [ ] single model may be trained multiple time, have a nice event logger(csv or tfevents)
 - [ ] logger for model mutations and training event
-- [ ] Dataset swither(mnist, cifar100 or others)
+- [x] Dataset swither (mnist, cifar100 or others)
 - [x] test skip div 2 
 - [x] write doc 
-- [ ] more operation  
+- [ ] refine operations  
+    - [ ] wider / Concatenate 
 
 @miibotree
 - [x] The ratio of widening propto depth 

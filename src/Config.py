@@ -2,15 +2,14 @@
 from __future__ import division
 from __future__ import print_function
 
-import argparse
-import tensorflow as tf
-import keras.utils, keras
+import argparse, sys, json
+import keras
 import numpy as np
 import os.path as osp
-# import tensorflow as tf
+import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
-from keras.datasets import cifar10
+from keras.datasets import cifar10, mnist
 
 import Utils
 from Utils import root_dir
@@ -39,11 +38,8 @@ def parse_args():
 
 # args=parse_args()
 
-import sys, json
-
 class MyConfig(object):
     # for all model
-    # Utils.mkdir_p(osp.join(root_dir,'output/tf_tmp/'))
     tf_graph = tf.get_default_graph()
     _sess_config = tf.ConfigProto(allow_soft_placement=True)
     _sess_config.gpu_options.allow_growth = True
@@ -53,52 +49,50 @@ class MyConfig(object):
     # # for all model, but determined when init the first config
     cache_data = None
 
-    def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True):
-        # TODO check when name = 'default_name'
-        # for all model
-        # self.tf_graph = tf.get_default_graph()
-        # _sess_config = tf.ConfigProto(allow_soft_placement=True)
-        # _sess_config.gpu_options.allow_growth = True
-        # self.sess = tf.Session(config=_sess_config, graph=self.tf_graph)
-        # K.set_session(self.sess)
-        # K.set_image_data_format("channels_last")
+    def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True,
+                 dataset_type='cifar10'):
+        # for all model:
+        self.dataset_type = dataset_type
+        self.limit_data = limit_data
+        if dataset_type == 'cifar10':
+            self.input_shape = (32, 32, 3)
+        else:
+            self.input_shape = (28, 28, 1)
+        self.nb_class = 10
+        self.dataset = None
+        if limit_data:
+            self.load_data(9999, type=self.dataset_type)
+        else:
+            self.load_data(1, type=self.dataset_type)
 
         # for ga:
         self.evoluation_time = evoluation_time
 
         # for single model
         self.set_name(name, clean=clean)
-        self.dbg = limit_data
-        self.input_shape = (3, 32, 32) if K.image_data_format() == "Channels_first" else (32, 32, 3)
-        self.nb_class = 10
         self.batch_size = 256
         self.epochs = epochs
         self.verbose = verbose
         self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
                                             min_lr=0.5e-7)
         self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
-        self.set_logger_path(self.name+'.csv')
-        self.limit_data = limit_data
-        # for all model, but determined when init the first config
-        if limit_data:
-            self.dataset = self.load_data(9999)
-        else:
-            self.dataset = self.load_data(1)
+        self.csv_logger = None
+        self.set_logger_path(self.name + '.csv')
 
-    def set_logger_path(self,name):
-        self.csv_logger=CSVLogger(osp.join(self.output_path, name))
+    def set_logger_path(self, name):
+        self.csv_logger = CSVLogger(osp.join(self.output_path, name))
 
     def to_json(self):
         d = dict(name=self.name,
                  epochs=self.epochs,
-                 verbose=self.verbose,
-                 dbg=self.dbg)
+                 verbose=self.verbose)
         with open(osp.join(self.output_path, 'config.json')) as f:
             json.dumps(f, d)
         return
 
     def copy(self, name='diff_name'):
-        new_config = MyConfig(self.epochs, self.verbose, self.dbg, name)
+        new_config = MyConfig(self.epochs, self.verbose, limit_data=self.limit_data, name=name,
+                              evoluation_time=self.evoluation_time, dataset_type=self.dataset_type)
         return new_config
 
     def set_name(self, name, clean=True):
@@ -124,12 +118,15 @@ class MyConfig(object):
 
     @staticmethod
     def _limit_data(x, div):
-        div = float(div)
+        div = min(float(div), x.shape[0] - 1)
         return x[:int(x.shape[0] / div), ...]
 
-    def load_data(self, limit_data):
+    def load_data(self, limit_data, type='cifar10'):
         if MyConfig.cache_data is None:
-            (train_x, train_y), (test_x, test_y) = cifar10.load_data()
+            if type == 'cifar10':
+                (train_x, train_y), (test_x, test_y) = cifar10.load_data()
+            else:
+                (train_x, train_y), (test_x, test_y) = mnist.load_data()
             train_x, mean_img = self._preprocess_input(train_x, None)
             test_x, _ = self._preprocess_input(test_x, mean_img)
 
@@ -140,4 +137,7 @@ class MyConfig(object):
             for key, val in res.iteritems():
                 res[key] = MyConfig._limit_data(val, limit_data)
             MyConfig.cache_data = res
-        return MyConfig.cache_data
+        self.dataset = MyConfig.cache_data
+
+if __name__ =='__main__':
+    config=MyConfig(epochs=1, verbose=2, limit_data=False, name='ga', evoluation_time=3,dataset_type='mnist')
