@@ -1,11 +1,11 @@
+import os
+import re
 import subprocess
 
 import keras
 import keras.backend as K
 import matplotlib
 import numpy as np
-import os
-import re
 import tensorflow as tf
 
 matplotlib.use('TkAgg')
@@ -22,23 +22,23 @@ root_dir = osp.normpath(
 
 from IPython.display import display, HTML, SVG
 
-
-# TODO map lengthy name to clean ones
+# TODO map lengthy name to clean name
 
 def choice_dict(mdict, size):
     choice = np.random.choice(mdict.keys(), size=size, replace=False)
     return {name: model for name, model in mdict.items() if name in choice}
 
+
 def choice_dict_keep_latest(mdict, size):
-    import re
-    #find the max ind model
+    # find the max ind model
     max_ind = 0
     for name, model in mdict.items():
-        iter, ind =  filter(str.isdigit, name)
+        # iter, ind = filter(str.isdigit, name)
+        iter,ind=re.findall('ga_iter_(\d+)_ind_(\d+)',name)[0]
 
         if ind > max_ind:
             max_ind = ind
-            latest = {name : model}
+            latest = {name: model}
     return latest
 
 

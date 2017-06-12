@@ -126,10 +126,14 @@ class MyGraph(nx.DiGraph):
             if type is None:
                 return self.successors(node)
             else:
-                dfs_list = nx.dfs_successors(self, node)
-                dfs_list = [_node for _node in dfs_list if _node.type == type]
-                dfs_list
-                return [dfs_list[0]]
+                poss_list,begin=[],False
+                for poss in nx.topological_sort(self):
+                    if poss == node:
+                        begin=True
+                        continue
+                    if begin and poss in name2node.values():
+                        poss_list.append(poss)
+                return [poss_list[0]]
         elif last_layer:
             return self.predecessors(node)
         else:
@@ -243,14 +247,14 @@ class MyGraph(nx.DiGraph):
                     for ind, layer_input_tensor, ori_shape in \
                             zip(range(len(layer_input_tensors)), layer_input_tensors, ori_shapes):
                         diff_shape = ori_shape - new_shape
-                        if diff_shape.all():
+                        if diff_shape.any():
                             diff_shape += 1
                             layer_input_tensors[ind] = \
                                 keras.layers.MaxPool2D(pool_size=diff_shape, strides=1, name=node.name + '_maxpool2d')(
                                     layer_input_tensor)
                         if ori_chnls[ind] > new_chnl:
                             layer_input_tensors[ind] = \
-                                Conv2D(filters=new_chnl, kernel_size=ori_chnls[ind], padding='same',
+                                Conv2D(filters=new_chnl, kernel_size=1, padding='same',
                                        name=node.name + '_conv2d')(layer_input_tensor)
                         layer = keras.layers.Add()
 

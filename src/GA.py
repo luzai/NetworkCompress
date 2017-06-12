@@ -1,16 +1,18 @@
-import keras, tensorflow, json
+import json
+import multiprocessing as mp
+import time
 
+import keras
 import numpy as np
 from keras.layers import Input, Conv2D, GlobalMaxPooling2D, Activation
 from keras.models import Model
-import multiprocessing as mp
-import Config
+
+import GAClient
 import Utils
 from Config import MyConfig
+from Logger import logger
 from Model import MyModel, MyGraph
 from Net2Net import Net2Net
-import GAClient, time
-from Logger import logger
 
 
 class GA(object):
@@ -24,7 +26,7 @@ class GA(object):
         self.max_ind = 0
         self.iter = 0
         self.nb_inv = nb_inv  # 10 later
-        self.queue = mp.Queue(self.nb_inv)
+        self.queue = mp.Queue(self.nb_inv * 2)
 
     '''
         define original init model 
@@ -115,7 +117,11 @@ class GA(object):
                         after_model = self.net2net.add_group(before_model, config=new_config)
                         suceeded = True
                 except Exception as inst:
-                    print inst
+                    logger.error(
+                        "before model {} after model {} evoultion choice {} fail ref to detailed summary".format(
+                            before_model.config.name, after_model.config.name, evolution_choice))
+                    before_model.model.summary()
+                    after_model.model.summary()
 
             assert 'after_model' in locals()
             # TODO interface for deep wide + weight copy
@@ -152,13 +158,19 @@ class GA(object):
                 setattr(self.population[name], 'score', score)
 
         if parallel:
-            for i in range(len(clients)):
+            cnt = 0
+            for c in clients:
+                c.join()
+            while not self.queue.empty():
                 d = self.queue.get()
                 name = d[0]
                 score = d[1]
                 setattr(self.population[name], 'score', score)
-            for c in clients:
-                c.join()
+                cnt += 1
+            if cnt != len(clients):
+                from IPython import embed
+                embed()
+                time.sleep(-1)
 
     def ga_main(self):
         for i in range(self.nb_inv):
@@ -170,14 +182,20 @@ class GA(object):
             self.max_ind += 1
         for i in range(self.gl_config.evoluation_time):
             logger.info("Now {} evolution ".format(i + 1))
-            self.mutation_process()
-            self.select_process()
-            self.train_process()
+            if dbg:
+                self.mutation_process()
+                self.select_process()
+                self.train_process()
+            else:
+                self.mutation_process()
+                self.train_process()
+                self.select_process()
 
     def select_process(self):
         # for debug, just keep the latest evolutioned model
-        self.population = Utils.choice_dict_keep_latest(self.population, self.nb_inv)
-        return
+        if dbg:
+            self.population = Utils.choice_dict_keep_latest(self.population, self.nb_inv)
+            return
 
         for model in self.population.values():
             assert hasattr(model, 'score'), 'to eval we need score'
@@ -188,15 +206,15 @@ class GA(object):
 
 
 if __name__ == "__main__":
-    global parallel
+    global parallel, dbg
     dbg = False
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=5)
-        nb_inv = 1
+        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=10)
+        nb_inv = 5
     else:
-        parallel = False
-        gl_config = MyConfig(epochs=10, verbose=2, limit_data=False, name='ga', evoluation_time=5)
-        nb_inv = 1
+        parallel = True
+        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=3, dataset_type='mnist')
+        nb_inv = 3
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()
