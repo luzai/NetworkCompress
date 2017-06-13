@@ -50,7 +50,7 @@ class MyConfig(object):
     cache_data = None
 
     def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True,
-                 dataset_type='cifar10'):
+                 dataset_type='cifar10', debug = False):
         # for all model:
         self.dataset_type = dataset_type
         self.limit_data = limit_data
@@ -78,6 +78,7 @@ class MyConfig(object):
         self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
         self.csv_logger = None
         self.set_logger_path(self.name + '.csv')
+        self.debug = debug
 
     def set_logger_path(self, name):
         self.csv_logger = CSVLogger(osp.join(self.output_path, name))

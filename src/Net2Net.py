@@ -29,10 +29,11 @@ class Net2Net(object):
             return model
 
     def deeper(self, model, config):
+
         # select
         names = [node.name
                  for node in model.graph.nodes()
-                 if node.type == 'Conv2D']
+                 if node.type == 'Conv2D' or node.type == 'Group']
 
         while True:
             choice = names[np.random.randint(0, len(names))]
@@ -76,7 +77,7 @@ class Net2Net(object):
             from_idx = np.random.randint(0, len(names) - 2)
             to_idx = from_idx + 1
             next_nodes = model.graph.get_nodes(names[to_idx], next_layer=True, last_layer=False)
-            if 'Concatenate' in [node.type for node in next_nodes]:
+            if 'Add' in [node.type for node in next_nodes]:
                 continue
             else:
                 break
@@ -172,7 +173,7 @@ class Net2Net(object):
             try:
                 _after_model.get_layer(name=name).set_weights(weights)
             except Exception as inst:
-                logger.info("ignore copy layer {} from model {} to model {} because {}".format(name,
+                logger.warning("ignore copy layer {} from model {} to model {} because {}".format(name,
                                                                                                before_model.config.name,
                                                                                                after_model.config.name,
                                                                                                inst))

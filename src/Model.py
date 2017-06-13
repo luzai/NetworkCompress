@@ -172,11 +172,10 @@ class MyGraph(nx.DiGraph):
         def f(input):
             group_output = []
             for i in range(group_num):
-                # add name: group_idx1_conv_idx2
                 tower = Conv2D(filters / group_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same',
                                kernel_initializer=GroupIdentityConv(i, group_num))(input)
                 tower = Conv2D(filters / group_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same',
-                               kernel_initializer=IdentityConv())(tower)
+                               kernel_initializer=IdentityConv(), activation='relu')(tower)
                 group_output.append(tower)
 
             if K.image_data_format() == 'channels_first':

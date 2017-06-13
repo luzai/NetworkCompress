@@ -36,8 +36,8 @@ def choice_dict_keep_latest(mdict, size):
         # iter, ind = filter(str.isdigit, name)
         iter,ind=re.findall('ga_iter_(\d+)_ind_(\d+)',name)[0]
 
-        if ind > max_ind:
-            max_ind = ind
+        if int(ind) > max_ind:
+            max_ind = int(ind)
             latest = {name: model}
     return latest
 
