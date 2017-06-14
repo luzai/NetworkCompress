@@ -102,26 +102,27 @@ class GA(object):
             while not suceeded:
                 evolution_choice_list = ['deeper', 'wider', 'add_skip', 'add_group']
                 evolution_choice = np.random.choice(evolution_choice_list, 1)[0]
+
                 logger.info("evolution choice {}".format(evolution_choice))
-                try:
-                    if evolution_choice == 'deeper':
-                        after_model = self.net2net.deeper(before_model, config=new_config)
-                        suceeded = True
-                    elif evolution_choice == 'wider':
-                        after_model = self.net2net.wider(before_model, config=new_config)
-                        suceeded = True
-                    elif evolution_choice == 'add_skip':
-                        after_model = self.net2net.add_skip(before_model, config=new_config)
-                        suceeded = True
-                    elif evolution_choice == 'add_group':
-                        after_model = self.net2net.add_group(before_model, config=new_config)
-                        suceeded = True
-                except Exception as inst:
-                    logger.error(
-                        "before model {} after model {} evoultion choice {} fail ref to detailed summary".format(
-                            before_model.config.name, after_model.config.name, evolution_choice))
-                    before_model.model.summary()
-                    after_model.model.summary()
+                #try:
+                if evolution_choice == 'deeper':
+                    after_model = self.net2net.deeper(before_model, config=new_config)
+                    suceeded = True
+                elif evolution_choice == 'wider':
+                    after_model = self.net2net.wider(before_model, config=new_config)
+                    suceeded = True
+                elif evolution_choice == 'add_skip':
+                    after_model = self.net2net.add_skip(before_model, config=new_config)
+                    suceeded = True
+                elif evolution_choice == 'add_group':
+                    after_model = self.net2net.add_group(before_model, config=new_config)
+                    suceeded = True
+                # except Exception as inst:
+                #     logger.error(
+                #         "before model {} after model {} evoultion choice {} fail ref to detailed summary".format(
+                #             before_model.config.name, after_model.config.name, evolution_choice))
+                #     before_model.model.summary()
+                #     after_model.model.summary()
 
             assert 'after_model' in locals()
             # TODO interface for deep wide + weight copy
@@ -207,14 +208,14 @@ class GA(object):
 
 if __name__ == "__main__":
     global parallel, dbg
-    dbg = False
+    dbg = True
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=10)
-        nb_inv = 5
+        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=10)
+        nb_inv = 1
     else:
-        parallel = True
-        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=3, dataset_type='mnist')
-        nb_inv = 3
+        parallel = False
+        gl_config = MyConfig(epochs=50, verbose=2, limit_data=True, name='ga', evoluation_time=10, dataset_type='mnist')
+        nb_inv = 6
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()

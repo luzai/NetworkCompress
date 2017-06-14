@@ -55,7 +55,7 @@ class GroupIdentityConv(Initializer):
         array = np.zeros(shape, dtype=float)
         cx, cy = (shape[0] - 1) // 2, (shape[1] - 1) // 2
         cnt = 0
-        for i in range(self.idx * shape[3], (self.idx + 1) * shape[3]):
+        for i in range(self.idx * shape[3], min(shape[2],(self.idx + 1) * shape[3])):
             array[cx, cy, i, cnt] = 1
             cnt = cnt + 1
         return K.tensorflow_backend.constant(array, dtype=dtype)
@@ -170,21 +170,33 @@ class MyGraph(nx.DiGraph):
 
     def group_layer(self, input_tensor, group_num, filters, name):
         def f(input):
-            group_output = []
-            for i in range(group_num):
-                tower = Conv2D(filters / group_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same',
-                               kernel_initializer=GroupIdentityConv(i, group_num))(input)
-                tower = Conv2D(filters / group_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same',
+            if group_num == 1:
+                tower = Conv2D(filters, (1, 1), name=name + '_conv2d_0_1', padding='same',
+                               kernel_initializer=IdentityConv())(input)
+                tower = Conv2D(filters, (3, 3), name=name + '_conv2d_0_2', padding='same',
                                kernel_initializer=IdentityConv(), activation='relu')(tower)
-                group_output.append(tower)
+                return tower
+            else:
+                group_output = []
+                for i in range(group_num):
+                    filter_num = filters / group_num
+                    #if filters = 201, group_num = 4, make sure last group filters num = 51
+                    if i == group_num - 1: # last group
+                        filter_num = filters - i * (filters / group_num)
 
-            if K.image_data_format() == 'channels_first':
-                axis = 1
-            elif K.image_data_format() == 'channels_last':
-                axis = 3
-            output = Concatenate(axis=axis)(group_output)
+                    tower = Conv2D(filter_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same',
+                                   kernel_initializer=GroupIdentityConv(i, group_num))(input)
+                    tower = Conv2D(filter_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same',
+                                   kernel_initializer=IdentityConv(), activation='relu')(tower)
+                    group_output.append(tower)
 
-            return output
+                if K.image_data_format() == 'channels_first':
+                    axis = 1
+                elif K.image_data_format() == 'channels_last':
+                    axis = 3
+                output = Concatenate(axis=axis)(group_output)
+
+                return output
 
         return f
 
