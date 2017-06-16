@@ -14,6 +14,7 @@ import networkx as nx
 import os.path as osp
 from Logger import logger
 from keras.utils import vis_utils
+import random
 
 # from Init import root_dir
 root_dir = osp.normpath(
@@ -40,6 +41,13 @@ def choice_dict_keep_latest(mdict, size):
             max_ind = int(ind)
             latest = {name: model}
     return latest
+
+def weight_choice(weight):
+    t = random.randint(0, sum(weight) - 1)
+    for i, val in enumerate(weight):
+        t -= val
+        if t < 0:
+            return i
 
 
 # descrapted

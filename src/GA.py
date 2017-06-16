@@ -89,6 +89,17 @@ class GA(object):
     def get_curr_config(self):
         return self.gl_config.copy('ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind))
 
+    #TODO: detail implementation of choice weight calculate
+    '''
+        Principles:
+        1. wider and deeper operation should have more weight than add_group and add_skip operation
+        2. add_group and add_skip operation's weight can rise if they haven't been chosen for a long time
+        more principles to discuss, however more principles means more prior knowledge, may reduce randomness
+    '''
+    def calc_choice_weight(self, evolution_choice_list, model):
+        choice_len = len(evolution_choice_list)
+        return [1] * choice_len # equal weight now
+
     def mutation_process(self):
         if self.iter != 0:
             for name, model in self.population.items():
@@ -100,13 +111,28 @@ class GA(object):
             new_config = self.get_curr_config()
             suceeded = False
             while not suceeded:
-                evolution_choice_list = ['deeper', 'wider', 'add_skip', 'add_group']
-                evolution_choice = np.random.choice(evolution_choice_list, 1)[0]
+                #TODO: there are still some problems with deeper_with_pooling operation
+                evolution_choice_list = ['deeper_with_pooling', 'deeper', 'wider', 'add_skip', 'add_group']
+                evolution_choice_weight = self.calc_choice_weight(evolution_choice_list, before_model)
+                evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_weight)]
+
+                # maxpooling layers have limit numbers
+                if evolution_choice == 'deeper_with_pooling':
+                    if before_model.config.max_pooling_cnt >= before_model.config.max_pooling_limit:
+                        logger.warning('max_pooling layer up to limit, choose other evolution_choise')
+                        continue
+                    else:
+                        new_config.max_pooling_cnt = before_model.config.max_pooling_cnt + 1
+                else:
+                    new_config.max_pooling_cnt = before_model.config.max_pooling_cnt
 
                 logger.info("evolution choice {}".format(evolution_choice))
                 #try:
                 if evolution_choice == 'deeper':
-                    after_model = self.net2net.deeper(before_model, config=new_config)
+                    after_model = self.net2net.deeper(before_model, config=new_config, with_pooling=False)
+                    suceeded = True
+                elif evolution_choice == 'deeper_with_pooling':
+                    after_model = self.net2net.deeper(before_model, config=new_config, with_pooling=True)
                     suceeded = True
                 elif evolution_choice == 'wider':
                     after_model = self.net2net.wider(before_model, config=new_config)

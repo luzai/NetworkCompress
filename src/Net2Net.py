@@ -14,15 +14,6 @@ from Config import MyConfig
 from Logger import logger
 from Model import MyModel, MyGraph, Node
 
-# TODO: put these variables to gl config ?
-global MODEL_MAX_CONV_WIDTH
-global MODEL_MIN_CONV_WIDTH
-global MODEL_MAX_DEPTH
-
-MODEL_MAX_CONV_WIDTH = 1024
-MODEL_MIN_CONV_WIDTH = 128
-MODEL_MAX_DEPTH = 20
-
 
 class Net2Net(object):
     @staticmethod
@@ -32,8 +23,7 @@ class Net2Net(object):
         else:
             return model
 
-    def deeper(self, model, config):
-
+    def deeper(self, model, config, with_pooling):
         # select
         names = [node.name
                  for node in model.graph.nodes()
@@ -43,9 +33,12 @@ class Net2Net(object):
             next_nodes = model.graph.get_nodes(choice, next_layer=True, last_layer=False)
             if 'GlobalMaxPooling2D' not in [node.type for node in next_nodes]:
                 break
-        logger.info('choose {} to deeper'.format(choice))
-        # grow
-        return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config)
+        if with_pooling == False:
+            logger.info('choose {} to deeper'.format(choice))
+            return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config, with_pooling=False)
+        else:
+            logger.info('choose {} to deeper_with_pooling'.format(choice))
+            return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config, with_pooling=True)
 
 
     # find two conjacent conv layers
@@ -76,7 +69,7 @@ class Net2Net(object):
                 layer_depth = idx + 1
 
         cur_width = cur_node.config['filters']
-        max_cur_width = int( (MODEL_MAX_CONV_WIDTH - MODEL_MIN_CONV_WIDTH) * layer_depth / MODEL_MAX_DEPTH ) + MODEL_MIN_CONV_WIDTH
+        max_cur_width = int( (MyConfig.MODEL_MAX_CONV_WIDTH - MyConfig.MODEL_MIN_CONV_WIDTH) * layer_depth / MyConfig.MODEL_MAX_DEPTH ) + MyConfig.MODEL_MIN_CONV_WIDTH
         width_ratio = np.random.rand()
         new_width = int (cur_width + width_ratio * (max_cur_width - cur_width))
         logger.info('choose {} to wider'.format(choice))
@@ -266,11 +259,14 @@ class Net2Net(object):
         return new_model
 
     #deeper from group layer or conv layer
-    def deeper_conv2d(self, model, layer_name, config, kernel_size=3, filters='same'):
+    def deeper_conv2d(self, model, layer_name, config, with_pooling, kernel_size=3, filters='same'):
         # construct graph
         new_graph = model.graph.copy()
-
-        new_node = Node(type='Conv2D', name='new',
+        if with_pooling == False:
+            type='Conv2D'
+        else:
+            type='Conv2D_Pooling'
+        new_node = Node(type=type, name='new',
                         config={'kernel_size': kernel_size, 'filters': filters}
                         )
         new_graph.deeper(layer_name, new_node)
@@ -284,7 +280,7 @@ class Net2Net(object):
         # what we actually need is only w_conv1's shape
         # more specifically, only kh, kw and filters are needed, num_channel is not necessary
         node_type = model.graph.get_nodes(layer_name)[0].type
-        if  node_type== 'Conv2D':
+        if  node_type == 'Conv2D':
             w_conv1, b_conv1 = new_model.get_layers(layer_name)[0].get_weights()
             # tensorflow kernel format: [filter_height, filter_width, in_channels, out_channels] channels_last
             # theano kernel format:     [output_channels, input_channels, filter_rows, filter_columns] channels_first

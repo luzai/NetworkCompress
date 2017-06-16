@@ -10,7 +10,7 @@ import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
 from keras.datasets import cifar10, mnist
-
+from math import log
 import Utils
 from Utils import root_dir
 
@@ -49,6 +49,11 @@ class MyConfig(object):
     # # for all model, but determined when init the first config
     cache_data = None
 
+
+    MODEL_MAX_CONV_WIDTH = 1024
+    MODEL_MIN_CONV_WIDTH = 128
+    MODEL_MAX_DEPTH = 20
+
     def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True,
                  dataset_type='cifar10', debug = False):
         # for all model:
@@ -79,6 +84,8 @@ class MyConfig(object):
         self.csv_logger = None
         self.set_logger_path(self.name + '.csv')
         self.debug = debug
+        self.max_pooling_limit = int(log(min(self.input_shape[0], self.input_shape[1]), 2)) - 2
+        self.max_pooling_cnt = 0
 
     def set_logger_path(self, name):
         self.csv_logger = CSVLogger(osp.join(self.output_path, name))

@@ -13,6 +13,7 @@ from keras.layers.merge import Concatenate
 import keras.backend as K
 from keras.utils.conv_utils import convert_kernel
 from keras.initializers import Initializer
+from keras import regularizers
 import Utils
 from Utils import vis_graph, vis_model
 from Config import MyConfig
@@ -168,6 +169,14 @@ class MyGraph(nx.DiGraph):
         self.add_edge(node, new_node)
         self.add_edge(new_node, next_node)
 
+    def conv_pooling_layer(self, input_tensor, name, kernel_size, filters):
+        def f(input):
+            layer = Conv2D(kernel_size=kernel_size, filters=filters, name=name, padding='same',
+                           activation='relu')(input)
+            layer = keras.layers.MaxPooling2D(name=name + '_maxpooling')(layer)
+            return layer
+        return f
+
     def group_layer(self, input_tensor, group_num, filters, name):
         def f(input):
             if group_num == 1:
@@ -226,7 +235,9 @@ class MyGraph(nx.DiGraph):
                     filters = node.config['filters']
 
                     layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
-                                   activation='relu')
+                                   activation='relu', kernel_regularizer=regularizers.l2(0.01))
+                elif node.type == 'Conv2D_Pooling':
+                    layer = self.conv_pooling_layer(layer_input_tensor, name=node.name, kernel_size=kernel_size, filters=filters)
                 elif node.type == 'Group':
                     layer = self.group_layer(layer_input_tensor, name=node.name, group_num=node.config['group_num'],
                                              filters=node.config['filters'])
