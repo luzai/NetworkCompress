@@ -25,16 +25,16 @@ Contributor: @luzai, @miibotree
 @miibotree
 - [x] The ratio of widening propto depth 
 - [x] finish add group function, and rand select group number in [2,3,4,5] 
-- [ ] test different way to initialize group layer's weights.(for example, use identity)
-- [ ] skip layer use add operation, skip layer use 1 * 1 conv to keep the same channel number.
-- [ ] The propobility of adding Maxpooling layer inversely propto depth (constrain the number of MaxPooling layers)
+- [x] test different way to initialize group layer's weights.(for example, use identity)
+- [x] skip layer use add operation, skip layer use 1 * 1 conv to keep the same channel number.
+- [x] The propobility of adding Maxpooling layer inversely propto depth (constrain the number of MaxPooling layers)
+- [ ] add a conv with maxpooling layer will drop acc by a large margin, how to fix this problem?
 - [ ] Propobility of 5 mutation operations 
-- [ ] BN and ReLU
- 
-- [ ] wider_conv, deeper_conv
-    - [ ] New compy weight method 'Resize3D'(numpy?)
-    - [ ] Dropout
-    - [ ] BN (principle?)
+- [ ] to improve val acc and avoid overfitting
+    - [x] try regularizers(kernel regularizer, output regularizer), (Yes, effective)
+    - [ ] dropout
+    - [ ] BN
+- [ ] group layer's wider operation
 
 - [ ] Distribute/ parallel Training
 - [x] Mayavi
