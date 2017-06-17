@@ -33,13 +33,12 @@ class Net2Net(object):
             next_nodes = model.graph.get_nodes(choice, next_layer=True, last_layer=False)
             if 'GlobalMaxPooling2D' not in [node.type for node in next_nodes]:
                 break
-        if with_pooling == False:
+        if not with_pooling:
             logger.info('choose {} to deeper'.format(choice))
             return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config, with_pooling=False)
         else:
             logger.info('choose {} to deeper_with_pooling'.format(choice))
             return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config, with_pooling=True)
-
 
     # find two conjacent conv layers
     # for example, conv -> group is not allowed
@@ -63,21 +62,23 @@ class Net2Net(object):
             else:
                 continue
 
-        #calculate layer depth of the chosen node
+        # calculate layer depth of the chosen node
         for idx, node in enumerate(topo_nodes):
             if node.name == choice:
                 layer_depth = idx + 1
 
         cur_width = cur_node.config['filters']
-        max_cur_width = int( (MyConfig.MODEL_MAX_CONV_WIDTH - MyConfig.MODEL_MIN_CONV_WIDTH) * layer_depth / MyConfig.MODEL_MAX_DEPTH ) + MyConfig.MODEL_MIN_CONV_WIDTH
+        max_cur_width = int((
+                            MyConfig.MODEL_MAX_CONV_WIDTH - MyConfig.MODEL_MIN_CONV_WIDTH) * layer_depth / MyConfig.MODEL_MAX_DEPTH) + MyConfig.MODEL_MIN_CONV_WIDTH
         width_ratio = np.random.rand()
-        new_width = int (cur_width + width_ratio * (max_cur_width - cur_width))
+        new_width = int(cur_width + width_ratio * (max_cur_width - cur_width))
         logger.info('choose {} to wider'.format(choice))
         return self.wider_conv2d(model, layer_name=choice, new_width=new_width, config=config)
 
     '''
         TODO: random choose two layer to skip 
     '''
+
     def add_skip(self, model, config):
         assert nx.is_directed_acyclic_graph(model.graph)
         topo_nodes = nx.topological_sort(model.graph)
@@ -192,9 +193,9 @@ class Net2Net(object):
                 _after_model.get_layer(name=name).set_weights(weights)
             except Exception as inst:
                 logger.warning("ignore copy layer {} from model {} to model {} because {}".format(name,
-                                                                                               before_model.config.name,
-                                                                                               after_model.config.name,
-                                                                                               inst))
+                                                                                                  before_model.config.name,
+                                                                                                  after_model.config.name,
+                                                                                                  inst))
 
     def skip(self, model, from_name, to_name, config):
         # original: node1-> node2 -> node3
@@ -258,14 +259,14 @@ class Net2Net(object):
 
         return new_model
 
-    #deeper from group layer or conv layer
+    # deeper from group layer or conv layer
     def deeper_conv2d(self, model, layer_name, config, with_pooling, kernel_size=3, filters='same'):
         # construct graph
         new_graph = model.graph.copy()
         if with_pooling == False:
-            type='Conv2D'
+            type = 'Conv2D'
         else:
-            type='Conv2D_Pooling'
+            type = 'Conv2D_Pooling'
         new_node = Node(type=type, name='new',
                         config={'kernel_size': kernel_size, 'filters': filters}
                         )
@@ -280,12 +281,12 @@ class Net2Net(object):
         # what we actually need is only w_conv1's shape
         # more specifically, only kh, kw and filters are needed, num_channel is not necessary
         node_type = model.graph.get_nodes(layer_name)[0].type
-        if  node_type == 'Conv2D':
+        if node_type == 'Conv2D':
             w_conv1, b_conv1 = new_model.get_layers(layer_name)[0].get_weights()
             # tensorflow kernel format: [filter_height, filter_width, in_channels, out_channels] channels_last
             # theano kernel format:     [output_channels, input_channels, filter_rows, filter_columns] channels_first
-            if K.image_data_format() == "channels_first": #theano format
-                #convert_kernel function Converts a Numpy kernel matrix from Theano format to TensorFlow format, vise versa
+            if K.image_data_format() == "channels_first":  # theano format
+                # convert_kernel function Converts a Numpy kernel matrix from Theano format to TensorFlow format, vise versa
                 w_conv1 = convert_kernel(w_conv1)
             kh, kw, num_channel, filters = w_conv1.shape
         elif node_type == 'Group':
@@ -294,7 +295,7 @@ class Net2Net(object):
         w_conv2, b_conv2 = new_model.get_layers(layer_name, next_layer=True)[0].get_weights()
 
         new_w_conv2, new_b_conv2 = Net2Net._deeper_conv2d_weight(
-            kh = kh, kw = kw, filters = filters)
+            kh=kh, kw=kw, filters=filters)
 
         new_model.get_layers(layer_name, next_layer=True)[0].set_weights([new_w_conv2, new_b_conv2])
         self.copy_weight(model, new_model)

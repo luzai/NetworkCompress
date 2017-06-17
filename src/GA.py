@@ -86,8 +86,16 @@ class GA(object):
 
         return model_list
 
-    def get_curr_config(self):
-        return self.gl_config.copy('ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind))
+    def get_curr_config(self, parent_config=None):
+        name = 'ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind)
+        if parent_config is None:
+            return self.gl_config.copy(name)
+        else:
+            return parent_config.copy(name)
+
+    def calc_choice_weight(self, evolution_choice_list, model):
+        choice_len = len(evolution_choice_list)
+        return [1] * choice_len  # equal weight now
 
     def mutation_process(self):
         if self.iter != 0:
@@ -97,15 +105,16 @@ class GA(object):
         self.iter += 1
         for name, before_model in self.population.items():
             self.max_ind += 1
-            new_config = self.get_curr_config()
+            new_config = self.get_curr_config(before_model.config)
             suceeded = False
             while not suceeded:
-                #TODO: there are still some problems with deeper_with_pooling operation
+                # TODO: there are still some problems with deeper_with_pooling operation
                 evolution_choice_list = ['deeper_with_pooling', 'deeper', 'wider', 'add_skip', 'add_group']
                 evolution_choice_weight = self.calc_choice_weight(evolution_choice_list, before_model)
                 evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_weight)]
 
                 # maxpooling layers have limit numbers
+                # todo modified new_config and child_config should inherit from this
                 if evolution_choice == 'deeper_with_pooling':
                     if before_model.config.max_pooling_cnt >= before_model.config.max_pooling_limit:
                         logger.warning('max_pooling layer up to limit, choose other evolution_choise')
@@ -116,7 +125,7 @@ class GA(object):
                     new_config.max_pooling_cnt = before_model.config.max_pooling_cnt
 
                 logger.info("evolution choice {}".format(evolution_choice))
-                #try:
+                # try:
                 if evolution_choice == 'deeper':
                     after_model = self.net2net.deeper(before_model, config=new_config, with_pooling=False)
                     suceeded = True
@@ -132,12 +141,12 @@ class GA(object):
                 elif evolution_choice == 'add_group':
                     after_model = self.net2net.add_group(before_model, config=new_config)
                     suceeded = True
-                # except Exception as inst:
-                #     logger.error(
-                #         "before model {} after model {} evoultion choice {} fail ref to detailed summary".format(
-                #             before_model.config.name, after_model.config.name, evolution_choice))
-                #     before_model.model.summary()
-                #     after_model.model.summary()
+                    # except Exception as inst:
+                    #     logger.error(
+                    #         "before model {} after model {} evoultion choice {} fail ref to detailed summary".format(
+                    #             before_model.config.name, after_model.config.name, evolution_choice))
+                    #     before_model.model.summary()
+                    #     after_model.model.summary()
 
             assert 'after_model' in locals()
             # TODO interface for deep wide + weight copy
@@ -226,7 +235,7 @@ if __name__ == "__main__":
     dbg = True
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=10)
+        gl_config = MyConfig(epochs=0, verbose=2, limit_data=False, name='ga', evoluation_time=10)
         nb_inv = 1
     else:
         parallel = False

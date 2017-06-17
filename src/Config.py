@@ -101,6 +101,7 @@ class MyConfig(object):
     def copy(self, name='diff_name'):
         new_config = MyConfig(self.epochs, self.verbose, limit_data=self.limit_data, name=name,
                               evoluation_time=self.evoluation_time, dataset_type=self.dataset_type)
+        new_config.max_pooling_cnt=self.max_pooling_cnt
         return new_config
 
     def set_name(self, name, clean=True):

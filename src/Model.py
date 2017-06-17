@@ -56,7 +56,7 @@ class GroupIdentityConv(Initializer):
         array = np.zeros(shape, dtype=float)
         cx, cy = (shape[0] - 1) // 2, (shape[1] - 1) // 2
         cnt = 0
-        for i in range(self.idx * shape[3], min(shape[2],(self.idx + 1) * shape[3])):
+        for i in range(self.idx * shape[3], min(shape[2], (self.idx + 1) * shape[3])):
             array[cx, cy, i, cnt] = 1
             cnt = cnt + 1
         return K.tensorflow_backend.constant(array, dtype=dtype)
@@ -73,9 +73,7 @@ class Node(object):
         self.type = type
         self.name = name
         self.config = config
-        # decrypted:
-        # self.input_tensors = []
-        # self.output_tensors = []
+        self.depth = None
 
     def __str__(self):
         return self.name
@@ -106,13 +104,8 @@ class MyGraph(nx.DiGraph):
             for layer in model_l:
                 type = layer[0]
                 name = layer[1]
-                # name_ind = int(re.findall(r'\d+', name)[0])
                 config = layer[2]
                 _nodes.append(Node(type, name, config))
-                # if type not in self.type2inds.keys():
-                #     self.type2inds[type] = [name_ind]
-                # else:
-                #     self.type2inds[type] += [name_ind]
 
             self.add_path(_nodes)
 
@@ -127,10 +120,10 @@ class MyGraph(nx.DiGraph):
             if type is None:
                 return self.successors(node)
             else:
-                poss_list,begin=[],False
+                poss_list, begin = [], False
                 for poss in nx.topological_sort(self):
                     if poss == node:
-                        begin=True
+                        begin = True
                         continue
                     if begin and poss in name2node.values():
                         poss_list.append(poss)
@@ -141,12 +134,22 @@ class MyGraph(nx.DiGraph):
             return [node]
 
     def update(self):
-
         self.type2ind = {}
         for node in self.nodes():
             import re
             ind = int(re.findall(r'^\w+?(\d+)$', node.name)[0])
             self.type2ind[node.type] = self.type2ind.get(node.type, []) + [ind]
+        for node in nx.topological_sort(self):
+            if node.type in ['Conv2D', 'Group', 'Conv2D_Pooling']:
+                plus = 1
+            else:
+                plus = 0
+            if len(self.predecessors(node)) == 0:
+                node.depth = 0
+            else:
+                pre_depth = [_node.depth for _node in self.predecessors(node)]
+                pre_depth = max(pre_depth)
+                node.depth = self.max_depth = pre_depth + plus
 
     def deeper(self, name, new_node):
         node = self.get_nodes(name=name)[0]
@@ -169,15 +172,16 @@ class MyGraph(nx.DiGraph):
         self.add_edge(node, new_node)
         self.add_edge(new_node, next_node)
 
-    def conv_pooling_layer(self, input_tensor, name, kernel_size, filters):
+    def conv_pooling_layer(self, name, kernel_size, filters):
         def f(input):
             layer = Conv2D(kernel_size=kernel_size, filters=filters, name=name, padding='same',
                            activation='relu')(input)
             layer = keras.layers.MaxPooling2D(name=name + '_maxpooling')(layer)
             return layer
+
         return f
 
-    def group_layer(self, input_tensor, group_num, filters, name):
+    def group_layer(self, group_num, filters, name):
         def f(input):
             if group_num == 1:
                 tower = Conv2D(filters, (1, 1), name=name + '_conv2d_0_1', padding='same',
@@ -189,8 +193,8 @@ class MyGraph(nx.DiGraph):
                 group_output = []
                 for i in range(group_num):
                     filter_num = filters / group_num
-                    #if filters = 201, group_num = 4, make sure last group filters num = 51
-                    if i == group_num - 1: # last group
+                    # if filters = 201, group_num = 4, make sure last group filters num = 51
+                    if i == group_num - 1:  # last group
                         filter_num = filters - i * (filters / group_num)
 
                     tower = Conv2D(filter_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same',
@@ -209,9 +213,7 @@ class MyGraph(nx.DiGraph):
 
         return f
 
-    def to_model(self, input_shape, graph, name="default_for_op"):
-        # with graph.as_default():
-        #     with tf.name_scope(name) as scope:
+    def to_model(self, input_shape, name="default_for_op"):
         graph_helper = self.copy()
 
         assert nx.is_directed_acyclic_graph(graph_helper)
@@ -233,15 +235,19 @@ class MyGraph(nx.DiGraph):
                 if node.type == 'Conv2D':
                     kernel_size = node.config.get('kernel_size', 3)
                     filters = node.config['filters']
-
-                    layer = Conv2D(kernel_size=kernel_size, filters=filters, name=node.name, padding='same',
-                                   activation='relu', kernel_regularizer=regularizers.l2(0.01))
+                    layer = Conv2D(kernel_size=kernel_size, filters=filters,
+                                   name=node.name, padding='same',
+                                   activation='relu',
+                                   # kernel_regularizer=regularizers.l2(0.01)
+                                   )
                 elif node.type == 'Conv2D_Pooling':
-                    layer = self.conv_pooling_layer(layer_input_tensor, name=node.name, kernel_size=kernel_size, filters=filters)
+                    kernel_size = node.config.get('kernel_size', 3)
+                    filters = node.config['filters']
+                    layer = self.conv_pooling_layer(name=node.name, kernel_size=kernel_size,
+                                                    filters=filters)
                 elif node.type == 'Group':
-                    layer = self.group_layer(layer_input_tensor, name=node.name, group_num=node.config['group_num'],
+                    layer = self.group_layer(name=node.name, group_num=node.config['group_num'],
                                              filters=node.config['filters'])
-
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)
                 elif node.type == 'MaxPooling2D':
@@ -252,6 +258,13 @@ class MyGraph(nx.DiGraph):
                     activation_type = node.config['activation_type']
                     layer = Activation(activation=activation_type, name=node.name)
                 layer_output_tensor = layer(layer_input_tensor)
+                if node.type in ['Conv2D', 'Conv2D_Pooling', 'Group']:
+                    self.update(), graph_helper.update()
+                    MAX_DP, MIN_DP = .5, .01
+                    ratio_dp = - (MAX_DP-MIN_DP) /self.max_depth * node.depth + MAX_DP
+                    layer_output_tensor = keras.layers.Dropout(ratio_dp)(layer_output_tensor)
+                    logger.debug('layer {} ratio of dropout {}'.format(node.name,ratio_dp))
+
             else:
                 layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
                 if node.type == 'Add':
@@ -340,8 +353,6 @@ class MyModel(object):
             self.graph = graph
             self.model = self.graph.to_model(
                 self.config.input_shape,
-                # graph=self.config.tf_graph,
-                graph=None,
                 name=self.config.name)
         else:
             self.model = model
@@ -376,10 +387,19 @@ class MyModel(object):
                               verbose=self.config.verbose,
                               batch_size=self.config.batch_size,
                               epochs=self.config.epochs,
-                              callbacks=[self.config.lr_reducer, self.config.csv_logger, self.config.early_stopper,
-                                         TensorBoard(log_dir=self.config.tf_log_path)]
+                              callbacks=[self.config.lr_reducer,
+                                         self.config.csv_logger,
+                                         self.config.early_stopper,
+                                         TensorBoard(log_dir=self.config.tf_log_path,
+                                                     # histogram_freq=20,
+                                                     # batch_size=32,
+                                                     # write_graph=True,
+                                                     # write_grads=True,
+                                                     # write_images=True,
+                                                     # embeddings_freq=0
+                                                     )]
                               )
-        # todo earlystop?
+        # todo do we need earlystop?
         logger.info("Fit model {} Consume {}:".format(self.config.name, time.time() - tic))
         return hist
 

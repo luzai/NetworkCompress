@@ -23,6 +23,7 @@ root_dir = osp.normpath(
 
 from IPython.display import display, HTML, SVG
 
+
 # TODO map lengthy name to clean name
 
 def choice_dict(mdict, size):
@@ -35,19 +36,23 @@ def choice_dict_keep_latest(mdict, size):
     max_ind = 0
     for name, model in mdict.items():
         # iter, ind = filter(str.isdigit, name)
-        iter,ind=re.findall('ga_iter_(\d+)_ind_(\d+)',name)[0]
-
+        iter, ind = re.findall('ga_iter_(\d+)_ind_(\d+)', name)[0]
+        logger.debug('{} {} {}'.format(iter, ind, max_ind))
         if int(ind) > max_ind:
             max_ind = int(ind)
             latest = {name: model}
     return latest
 
+
 def weight_choice(weight):
-    t = random.randint(0, sum(weight) - 1)
-    for i, val in enumerate(weight):
-        t -= val
-        if t < 0:
-            return i
+    weight=np.array(weight).astype('float')
+    weight = weight / weight.sum()
+    return int(np.random.choice(range(len(weight)), p=weight))
+    # t = random.randint(0, sum(weight) - 1)
+    # for i, val in enumerate(weight):
+    #     t -= val
+    #     if t < 0:
+    #         return i
 
 
 # descrapted
@@ -101,7 +106,7 @@ def vis_graph(graph, name='net2net', show=False):
         if show:
             plt.show()
         plt.savefig('graph.png')
-        plt.close('all')
+        # plt.close('all')
     except Exception as inst:
         logger.warning(inst)
     os.chdir(osp.join(root_dir, 'src'))
