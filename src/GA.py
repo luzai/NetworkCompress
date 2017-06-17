@@ -89,17 +89,6 @@ class GA(object):
     def get_curr_config(self):
         return self.gl_config.copy('ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind))
 
-    #TODO: detail implementation of choice weight calculate
-    '''
-        Principles:
-        1. wider and deeper operation should have more weight than add_group and add_skip operation
-        2. add_group and add_skip operation's weight can rise if they haven't been chosen for a long time
-        more principles to discuss, however more principles means more prior knowledge, may reduce randomness
-    '''
-    def calc_choice_weight(self, evolution_choice_list, model):
-        choice_len = len(evolution_choice_list)
-        return [1] * choice_len # equal weight now
-
     def mutation_process(self):
         if self.iter != 0:
             for name, model in self.population.items():

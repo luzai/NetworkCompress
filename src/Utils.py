@@ -82,7 +82,7 @@ def vis_model(model, name='net2net', show_shapes=True):
         vis_utils.plot_model(model, to_file=name + '.pdf', show_shapes=show_shapes)
         vis_utils.plot_model(model, to_file=name + '.png', show_shapes=show_shapes)
     except Exception as inst:
-        logger.warning("{}".format(inst))
+        logger.error("cannot keras.plot_model {}".format(inst))
     os.chdir(osp.join(root_dir, 'src'))
 
 
