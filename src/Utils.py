@@ -7,7 +7,7 @@ import keras.backend as K
 import matplotlib
 import numpy as np
 import tensorflow as tf
-
+import pdb
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -15,6 +15,7 @@ import os.path as osp
 from Logger import logger
 from keras.utils import vis_utils
 import random
+from IPython import embed
 
 # from Init import root_dir
 root_dir = osp.normpath(
@@ -33,19 +34,19 @@ def choice_dict(mdict, size):
 
 def choice_dict_keep_latest(mdict, size):
     # find the max ind model
-    max_ind = 0
+    max_ind = -1
     for name, model in mdict.items():
         # iter, ind = filter(str.isdigit, name)
         iter, ind = re.findall('ga_iter_(\d+)_ind_(\d+)', name)[0]
-        logger.debug('{} {} {}'.format(iter, ind, max_ind))
+        logger.debug('iter {} ind {} max_ind {}'.format(iter, ind, max_ind))
         if int(ind) > max_ind:
             max_ind = int(ind)
             latest = {name: model}
+    assert 'latest' in locals().keys()
     return latest
 
-
 def weight_choice(weight):
-    weight=np.array(weight).astype('float')
+    weight = np.array(weight).astype('float')
     weight = weight / weight.sum()
     return int(np.random.choice(range(len(weight)), p=weight))
     # t = random.randint(0, sum(weight) - 1)
