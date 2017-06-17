@@ -1,6 +1,6 @@
 # Dependenct: Utils, Config
 import json
-
+from IPython import embed
 import keras
 import networkx as nx
 import numpy as np
@@ -261,9 +261,9 @@ class MyGraph(nx.DiGraph):
                 if node.type in ['Conv2D', 'Conv2D_Pooling', 'Group']:
                     self.update(), graph_helper.update()
                     MAX_DP, MIN_DP = .5, .01
-                    ratio_dp = - (MAX_DP-MIN_DP) /self.max_depth * node.depth + MAX_DP
+                    ratio_dp = - (MAX_DP - MIN_DP) / self.max_depth * node.depth + MAX_DP
                     layer_output_tensor = keras.layers.Dropout(ratio_dp)(layer_output_tensor)
-                    logger.debug('layer {} ratio of dropout {}'.format(node.name,ratio_dp))
+                    # logger.debug('layer {} ratio of dropout {}'.format(node.name, ratio_dp))
 
             else:
                 layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
@@ -291,9 +291,12 @@ class MyGraph(nx.DiGraph):
                             layer_input_tensors[ind] = \
                                 Conv2D(filters=new_chnl, kernel_size=1, padding='same',
                                        name=node.name + '_conv2d')(layer_input_tensor)
-                        layer = keras.layers.Add()
+
+                        layer = keras.layers.Add(name=node.name)
+                        # logger.debug('In graph to_model add a Add layer with name {}'.format(node.name))
 
                 if node.type == 'Concatenate':
+                    logger.critical('Concatenate is decrapted!!!')
                     if K.image_data_format() == "channels_last":
                         (width_ind, height_ind, chn_ind) = (1, 2, 3)
                     else:
@@ -315,9 +318,11 @@ class MyGraph(nx.DiGraph):
                     # def div2(x):
                     #     return x / 2.
                     # layer_input_tensors = [keras.layers.Lambda(div2)(tensor) for tensor in layer_input_tensors]
-                    layer = keras.layers.Concatenate(axis=chn_ind)
-                layer_output_tensor = layer(layer_input_tensors)
-
+                    layer = keras.layers.Concatenate(axis=chn_ind,name=node.name)
+                try:
+                    layer_output_tensor = layer(layer_input_tensors)
+                except:
+                    embed()
             graph_helper.add_node(node, layer=layer)
 
             if len(suc_nodes) == 0:
@@ -338,12 +343,11 @@ class MyGraph(nx.DiGraph):
     def to_json(self):
         data = json_graph.node_link_data(self)
         try:
-            str = json.dumps(data, indent=2, cls=CustomTypeEncoder)
+            _str = json.dumps(data, indent=2, cls=CustomTypeEncoder)
         except Exception as inst:
-            str = ""
-            print inst
-
-        return str
+            _str = ""
+            logger.error(str(inst))
+        return _str
 
 
 class MyModel(object):
@@ -369,6 +373,9 @@ class MyModel(object):
         nodes = self.graph.get_nodes(name, next_layer, last_layer, type=type)
         if not isinstance(nodes, list):
             nodes = [nodes]
+        for node in nodes:
+            if node.name not in name2layer:
+                embed()
         return map(_get_layer, [node.name for node in nodes])
 
     def compile(self):

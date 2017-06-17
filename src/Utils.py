@@ -38,7 +38,7 @@ def choice_dict_keep_latest(mdict, size):
     for name, model in mdict.items():
         # iter, ind = filter(str.isdigit, name)
         iter, ind = re.findall('ga_iter_(\d+)_ind_(\d+)', name)[0]
-        logger.debug('iter {} ind {} max_ind {}'.format(iter, ind, max_ind))
+        # logger.debug('iter {} ind {} max_ind {}'.format(iter, ind, max_ind))
         if int(ind) > max_ind:
             max_ind = int(ind)
             latest = {name: model}
@@ -66,7 +66,7 @@ def list2dict(mlist):
 
 
 def mkdir_p(name, delete=True):
-    # TODO it is not good for debug
+    # TODO it is not good for debug, but non-delete will also cause resource race
     if delete and tf.gfile.Exists(name):
         tf.gfile.DeleteRecursively(name)
     tf.gfile.MakeDirs(name)
@@ -182,6 +182,8 @@ def to_single_dir():
     os.chdir(root_dir)
     for parent, dirnames, filenames in os.walk('output/tf_tmp'):
         filenames = sorted(filenames)
+        if len(filenames)==1:
+            continue
         for ind, fn in enumerate(filenames):
             subprocess.call(('mkdir -p ' + parent + '/' + str(ind)).split())
             subprocess.call(('mv ' + parent + '/' + fn + ' ' + parent + '/' + str(ind) + '/').split())

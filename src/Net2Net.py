@@ -69,7 +69,7 @@ class Net2Net(object):
 
         cur_width = cur_node.config['filters']
         max_cur_width = int((
-                            MyConfig.MODEL_MAX_CONV_WIDTH - MyConfig.MODEL_MIN_CONV_WIDTH) * layer_depth / MyConfig.MODEL_MAX_DEPTH) + MyConfig.MODEL_MIN_CONV_WIDTH
+                                MyConfig.MODEL_MAX_CONV_WIDTH - MyConfig.MODEL_MIN_CONV_WIDTH) * layer_depth / MyConfig.MODEL_MAX_DEPTH) + MyConfig.MODEL_MIN_CONV_WIDTH
         width_ratio = np.random.rand()
         new_width = int(cur_width + width_ratio * (max_cur_width - cur_width))
         logger.info('choose {} to wider'.format(choice))
@@ -153,7 +153,7 @@ class Net2Net(object):
         new_graph.remove_edge(node, node1)
         new_graph.add_edge(node, new_node)
         new_graph.add_edge(new_node, node1)
-        logger.debug(new_graph.to_json())
+        # logger.debug(new_graph.to_json())
         new_model = MyModel(config=config, graph=new_graph)
         self.copy_weight(model, new_model)
         return new_model
@@ -173,7 +173,7 @@ class Net2Net(object):
         new_graph.remove_edge(node, node1)
         new_graph.add_edge(node, new_node)
         new_graph.add_edge(new_node, node1)
-        logger.debug(new_graph.to_json())
+        # logger.debug(new_graph.to_json())
         new_model = MyModel(config=config, graph=new_graph)
         self.copy_weight(model, new_model)
         return new_model
@@ -186,7 +186,9 @@ class Net2Net(object):
         layer_names = [l.name for l in _before_model.layers if
                        'input' not in l.name.lower() and
                        'maxpooling2d' not in l.name.lower() and
-                       'add' not in l.name.lower()]
+                       'add' not in l.name.lower() and
+                       'dropout' not in l.name.lower() and
+                       'concatenate' not in l.name.lower()]
         for name in layer_names:
             weights = _before_model.get_layer(name=name).get_weights()
             try:
@@ -216,7 +218,7 @@ class Net2Net(object):
         new_graph.add_edge(node1, new_node)
         new_graph.add_edge(node2, new_node)
         new_graph.add_edge(new_node, node3)
-        logger.debug(new_graph.to_json())
+        # logger.debug(new_graph.to_json())
         new_model = MyModel(config=config, graph=new_graph)
         self.copy_weight(model, new_model)
 
@@ -243,7 +245,7 @@ class Net2Net(object):
         assert new_node.type == 'Conv2D', 'must wide a conv'
         new_node.config['filters'] = new_width
 
-        logger.debug(new_graph.to_json())
+        # logger.debug(new_graph.to_json())
         # construct model
         new_model = MyModel(config=config, graph=new_graph)
         self.copy_weight(model, new_model)
@@ -271,9 +273,9 @@ class Net2Net(object):
                         config={'kernel_size': kernel_size, 'filters': filters}
                         )
         new_graph.deeper(layer_name, new_node)
-        logger.debug(new_graph.to_json())
+        # logger.debug(new_graph.to_json())
 
-        # construc model
+        # construct model
         new_model = MyModel(config=config, graph=new_graph)
 
         # inherit weight
@@ -385,9 +387,9 @@ class Net2Net(object):
 if __name__ == "__main__":
     config = MyConfig(epochs=1, verbose=1, limit_data=True, name='before', dataset_type='mnist')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 16}],
-               ["Conv2D", 'Conv2D2', {'filters': 64}],
-               ["MaxPooling2D", 'maxpooling2d1', {}],
-               ["Conv2D", 'Conv2D3', {'filters': 10}],
+               ["Group", 'group1', {'group_num': 2,'filters':12}],
+               # ["Conv2D_Pooling",'conv2d_pooling1',{'filters':12}],
+               ["Conv2D", 'Conv2D2', {'filters': 10}],
                ['GlobalMaxPooling2D', 'GlobalMaxPooling2D1', {}],
                ['Activation', 'Activation1', {'activation_type': 'softmax'}]]
     graph = MyGraph(model_l)
@@ -396,19 +398,9 @@ if __name__ == "__main__":
 
     net2net = Net2Net()
 
-    model = net2net.deeper(before_model, config=config.copy('deeper1'))
-    model = net2net.deeper_conv2d(before_model, layer_name='Conv2D2', config=config.copy('deeper1'))
-    model = net2net.wider_conv2d(model, layer_name='Conv2D2', width_ratio=2, config=config.copy('wide'))
-    model.comp_fit_eval()
-
-    model = net2net.wider(model, config=config)
-    model.comp_fit_eval()
-
-    model = net2net.add_skip(model, config=config.copy('skip1'))
-    model.comp_fit_eval()
-
-    model = net2net.add_group(model, config=config)
-    model.comp_fit_eval()
+    model = net2net.deeper_conv2d(before_model,
+                                  layer_name='Conv2D1',
+                                  config=config.copy('deeper1'), with_pooling=False)
 
     model.vis()
 

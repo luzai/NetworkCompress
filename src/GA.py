@@ -114,7 +114,7 @@ class GA(object):
                 evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_weight)]
 
                 # maxpooling layers have limit numbers
-                # todo modified new_config and child_config should inherit from this
+                # todo: modified new_config and child_config should inherit from parent_config
                 if evolution_choice == 'deeper_with_pooling':
                     if before_model.config.max_pooling_cnt >= before_model.config.max_pooling_limit:
                         logger.warning('max_pooling layer up to limit, choose other evolution_choise')
@@ -235,8 +235,8 @@ if __name__ == "__main__":
     dbg = True
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=0, verbose=2, limit_data=False, name='ga', evoluation_time=10)
-        nb_inv = 1
+        gl_config = MyConfig(epochs=0, verbose=2, limit_data=True, name='ga', evoluation_time=1000)
+        nb_inv = 5
     else:
         parallel = False
         gl_config = MyConfig(epochs=50, verbose=2, limit_data=True, name='ga', evoluation_time=10, dataset_type='mnist')

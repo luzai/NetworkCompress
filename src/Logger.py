@@ -32,8 +32,8 @@ logger.addHandler(infoHandler)
 
 # streamHandler show all logs into stdout screen, thus maybe easy for debug
 # streamHandler only added when debug = True
-dbg = False  # TODO: read dbg from gl_config
-if dbg == True:
+dbg = True  # TODO: read dbg from gl_config
+if dbg:
     streamHandler = logging.StreamHandler()
     streamHandler.setLevel(logging.DEBUG)
     streamHandler.setFormatter(formatter)
