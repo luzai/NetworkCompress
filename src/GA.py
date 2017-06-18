@@ -38,7 +38,7 @@ class GA(object):
         input_data = Input(shape=self.gl_config.input_shape)
         import random
         init_model_index = random.randint(1, 4)
-
+        init_model_index = 1
         if init_model_index == 1:  # one conv layer with kernel num = 64
             stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
 
@@ -93,9 +93,18 @@ class GA(object):
         else:
             return parent_config.copy(name)
 
+    #TODO: detail implementation of choice weight calculate
+    '''
+        Principles:
+        1. wider and deeper operation have more weight than add_group and add_skip operation
+        2. deeper_with_maxpooling has more weight than deeper at first
+        3. add_group and add_skip operation's weight can rise if they haven't been chosen for a long time
+        more principles to discuss, however more principles means more prior knowledge, may reduce randomness
+    '''
     def calc_choice_weight(self, evolution_choice_list, model):
         choice_len = len(evolution_choice_list)
-        return [1] * choice_len  # equal weight now
+        #return [5, 3, 4, 2, 2]
+        return [1] * choice_len # equal weight now
 
     def mutation_process(self):
         if self.iter != 0:
@@ -235,8 +244,8 @@ if __name__ == "__main__":
     dbg = True
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=0, verbose=2, limit_data=True, name='ga', evoluation_time=1000)
-        nb_inv = 5
+        gl_config = MyConfig(epochs=0, verbose=2, limit_data=True, name='ga', evoluation_time=20)
+        nb_inv = 1
     else:
         parallel = False
         gl_config = MyConfig(epochs=50, verbose=2, limit_data=True, name='ga', evoluation_time=10, dataset_type='mnist')

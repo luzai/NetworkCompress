@@ -113,7 +113,7 @@ class MyGraph(nx.DiGraph):
         if type is None:
             name2node = {node.name: node for node in self.nodes()}
         else:
-            name2node = {node.name: node for node in self.nodes() if node.type == type}
+            name2node = {node.name: node for node in self.nodes() if node.type in type}
         assert name in name2node.keys(), " Name must be uniqiue"
         node = name2node[name]
         if next_layer:
@@ -153,8 +153,7 @@ class MyGraph(nx.DiGraph):
 
     def deeper(self, name, new_node):
         node = self.get_nodes(name=name)[0]
-        next_node = self.get_nodes(name=name, next_layer=True)[0]
-        # TODO maybe more than 1
+        next_nodes = self.get_nodes(name=name, next_layer=True)
 
         # assign new node
         if new_node.name == 'new':
@@ -168,26 +167,28 @@ class MyGraph(nx.DiGraph):
         if new_node.config['filters'] == 'same':
             new_node.config['filters'] = node.config['filters']
 
-        self.remove_edge(node, next_node)
-        self.add_edge(node, new_node)
-        self.add_edge(new_node, next_node)
+        #there maybe multiple next_node, for example, next_layer is a skip layer or group layer
+        for next_node in next_nodes:
+            self.remove_edge(node, next_node)
+            self.add_edge(node, new_node)
+            self.add_edge(new_node, next_node)
 
-    def conv_pooling_layer(self, name, kernel_size, filters):
+    def conv_pooling_layer(self, name, kernel_size, filters, kernel_regularizer_l2):
         def f(input):
             layer = Conv2D(kernel_size=kernel_size, filters=filters, name=name, padding='same',
-                           activation='relu')(input)
+                           activation='relu', kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(input)
             layer = keras.layers.MaxPooling2D(name=name + '_maxpooling')(layer)
             return layer
 
         return f
 
-    def group_layer(self, group_num, filters, name):
+    def group_layer(self, group_num, filters, name, kernel_regularizer_l2):
         def f(input):
             if group_num == 1:
                 tower = Conv2D(filters, (1, 1), name=name + '_conv2d_0_1', padding='same',
                                kernel_initializer=IdentityConv())(input)
                 tower = Conv2D(filters, (3, 3), name=name + '_conv2d_0_2', padding='same',
-                               kernel_initializer=IdentityConv(), activation='relu')(tower)
+                               kernel_initializer=IdentityConv(), activation='relu', kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(tower)
                 return tower
             else:
                 group_output = []
@@ -200,7 +201,7 @@ class MyGraph(nx.DiGraph):
                     tower = Conv2D(filter_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same',
                                    kernel_initializer=GroupIdentityConv(i, group_num))(input)
                     tower = Conv2D(filter_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same',
-                                   kernel_initializer=IdentityConv(), activation='relu')(tower)
+                                   kernel_initializer=IdentityConv(), activation='relu', kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(tower)
                     group_output.append(tower)
 
                 if K.image_data_format() == 'channels_first':
@@ -213,7 +214,9 @@ class MyGraph(nx.DiGraph):
 
         return f
 
-    def to_model(self, input_shape, name="default_for_op"):
+    def to_model(self, input_shape, name="default_for_op", kernel_regularizer_l2 = 0.01):
+        # with graph.as_default():
+        #     with tf.name_scope(name) as scope:
         graph_helper = self.copy()
 
         assert nx.is_directed_acyclic_graph(graph_helper)
@@ -238,16 +241,16 @@ class MyGraph(nx.DiGraph):
                     layer = Conv2D(kernel_size=kernel_size, filters=filters,
                                    name=node.name, padding='same',
                                    activation='relu',
-                                   # kernel_regularizer=regularizers.l2(0.01)
+                                   kernel_regularizer=regularizers.l2(kernel_regularizer_l2)
                                    )
                 elif node.type == 'Conv2D_Pooling':
                     kernel_size = node.config.get('kernel_size', 3)
                     filters = node.config['filters']
                     layer = self.conv_pooling_layer(name=node.name, kernel_size=kernel_size,
-                                                    filters=filters)
+                                                    filters=filters, kernel_regularizer_l2 = kernel_regularizer_l2)
                 elif node.type == 'Group':
                     layer = self.group_layer(name=node.name, group_num=node.config['group_num'],
-                                             filters=node.config['filters'])
+                                             filters=node.config['filters'], kernel_regularizer_l2 = kernel_regularizer_l2)
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)
                 elif node.type == 'MaxPooling2D':
@@ -357,7 +360,8 @@ class MyModel(object):
             self.graph = graph
             self.model = self.graph.to_model(
                 self.config.input_shape,
-                name=self.config.name)
+                name=self.config.name,
+                kernel_regularizer_l2 = self.config.kernel_regularizer_l2)
         else:
             self.model = model
 
@@ -365,7 +369,13 @@ class MyModel(object):
         if type is None:
             name2layer = {layer.name: layer for layer in self.model.layers}
         else:
-            name2layer = {layer.name: layer for layer in self.model.layers if type.lower() in layer.name.lower()}
+            name2layer = { }
+            for layer in self.model.layers:
+                for t in type:
+                    if t.lower() in layer.name.lower():
+                        name2layer[layer.name] = layer
+                        break
+            #name2layer = {layer.name: layer for layer in self.model.layers if type.lower() in layer.name.lower()}
 
         def _get_layer(name):
             return name2layer[name]

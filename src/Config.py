@@ -49,11 +49,6 @@ class MyConfig(object):
     # # for all model, but determined when init the first config
     cache_data = None
 
-
-    MODEL_MAX_CONV_WIDTH = 1024
-    MODEL_MIN_CONV_WIDTH = 128
-    MODEL_MAX_DEPTH = 20
-
     def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True,
                  dataset_type='cifar10', debug = False):
         # for all model:
@@ -86,6 +81,11 @@ class MyConfig(object):
         self.debug = debug
         self.max_pooling_limit = int(log(min(self.input_shape[0], self.input_shape[1]), 2)) - 2
         self.max_pooling_cnt = 0
+
+        self.model_max_conv_width = 1024
+        self.model_min_conv_width = 128
+        self.model_max_depth = 20
+        self.kernel_regularizer_l2 = 0.015
 
     def set_logger_path(self, name):
         self.csv_logger = CSVLogger(osp.join(self.output_path, name))
