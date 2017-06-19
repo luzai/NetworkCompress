@@ -64,14 +64,9 @@ class Net2Net(object):
             else:
                 continue
 
-        # calculate layer depth of the chosen node
-        for idx, node in enumerate(topo_nodes):
-            if node.name == choice:
-                layer_depth = idx + 1
-
         cur_width = cur_node.config['filters']
 
-        max_cur_width = int((config.model_max_conv_width - config.model_min_conv_width) * layer_depth / config.model_max_depth ) \
+        max_cur_width = int((config.model_max_conv_width - config.model_min_conv_width) * cur_node.depth / config.model_max_depth ) \
                         + config.model_min_conv_width
         width_ratio = np.random.rand()
         new_width = int (cur_width + width_ratio * (max_cur_width - cur_width))

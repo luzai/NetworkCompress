@@ -45,7 +45,11 @@ def choice_dict_keep_latest(mdict, size):
     assert 'latest' in locals().keys()
     return latest
 
-def weight_choice(weight):
+def weight_choice(list, weight_dict):
+    weight = []
+    for element in list:
+        weight.append(weight_dict[element])
+
     weight = np.array(weight).astype('float')
     weight = weight / weight.sum()
     return int(np.random.choice(range(len(weight)), p=weight))

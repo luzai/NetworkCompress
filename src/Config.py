@@ -85,7 +85,7 @@ class MyConfig(object):
         self.model_max_conv_width = 1024
         self.model_min_conv_width = 128
         self.model_max_depth = 20
-        self.kernel_regularizer_l2 = 0.015
+        self.kernel_regularizer_l2 = 0.0
 
     def set_logger_path(self, name):
         self.csv_logger = CSVLogger(osp.join(self.output_path, name))

@@ -13,6 +13,7 @@ from Config import MyConfig
 from Logger import logger
 from Model import MyModel, MyGraph
 from Net2Net import Net2Net
+import networkx as nx
 
 
 class GA(object):
@@ -93,7 +94,6 @@ class GA(object):
         else:
             return parent_config.copy(name)
 
-    #TODO: detail implementation of choice weight calculate
     '''
         Principles:
         1. wider and deeper operation have more weight than add_group and add_skip operation
@@ -102,9 +102,30 @@ class GA(object):
         more principles to discuss, however more principles means more prior knowledge, may reduce randomness
     '''
     def calc_choice_weight(self, evolution_choice_list, model):
-        choice_len = len(evolution_choice_list)
-        #return [5, 3, 4, 2, 2]
-        return [1] * choice_len # equal weight now
+        model_depth = 0
+        for node in nx.topological_sort(model.graph):
+            if node.type in ['Conv2D', 'Group', 'Conv2D_Pooling']:
+                model_depth = model_depth + 1
+
+        model_max_depth = model.config.model_max_depth
+        max_pooling_limit = model.config.max_pooling_limit
+        max_pooling_cnt = model.config.max_pooling_cnt
+
+        weight = {}
+        if 'deeper_with_pooling' in evolution_choice_list:
+            weight['deeper_with_pooling'] = int(model_max_depth - model_max_depth / (2 * max_pooling_limit) * max_pooling_cnt)
+        if 'deeper' in evolution_choice_list:
+            weight['deeper'] = model_max_depth / 2
+        if 'wider' in evolution_choice_list:
+            weight['wider'] = model_max_depth / 2
+        if 'add_skip' in evolution_choice_list:
+            weight['add_skip'] = model_depth / 2
+        if 'add_group' in evolution_choice_list:
+            weight['add_group'] = model_depth / 2
+
+        #choice_len = len(evolution_choice_list)
+        #return [1] * choice_len # equal weight now
+        return weight
 
     def mutation_process(self):
         if self.iter != 0:
@@ -119,8 +140,8 @@ class GA(object):
             while not suceeded:
                 # TODO: there are still some problems with deeper_with_pooling operation
                 evolution_choice_list = ['deeper_with_pooling', 'deeper', 'wider', 'add_skip', 'add_group']
-                evolution_choice_weight = self.calc_choice_weight(evolution_choice_list, before_model)
-                evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_weight)]
+                weight = self.calc_choice_weight(evolution_choice_list, before_model)
+                evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_list, weight)]
 
                 # maxpooling layers have limit numbers
                 # todo: modified new_config and child_config should inherit from parent_config
@@ -244,7 +265,7 @@ if __name__ == "__main__":
     dbg = True
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=0, verbose=2, limit_data=True, name='ga', evoluation_time=20)
+        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=20)
         nb_inv = 1
     else:
         parallel = False
