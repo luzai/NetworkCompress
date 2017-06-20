@@ -28,11 +28,11 @@ Contributor: @luzai, @miibotree
 - [x] test different way to initialize group layer's weights.(for example, use identity)
 - [x] skip layer use add operation, skip layer use 1 * 1 conv to keep the same channel number.
 - [x] The propobility of adding Maxpooling layer inversely propto depth (constrain the number of MaxPooling layers)
-- [ ] add a conv with maxpooling layer will drop acc by a large margin, how to fix this problem?
-- [ ] Propobility of 5 mutation operations 
+- [x] add a conv with maxpooling layer will drop acc by a large margin, how to fix this problem? (maxpooling should be added early)
+- [x] Propobility of 5 mutation operations 
 - [ ] to improve val acc and avoid overfitting
     - [x] try regularizers(kernel regularizer, output regularizer), (Yes, effective)
-    - [ ] dropout
+    - [x] dropout, (Yes, effective)
     - [ ] BN
 - [ ] group layer's wider operation
 
