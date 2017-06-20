@@ -9,10 +9,10 @@ import os.path as osp
 import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import ReduceLROnPlateau, CSVLogger, EarlyStopping
-from keras.datasets import cifar10, mnist
+from keras.datasets import cifar10, mnist, cifar100
 from math import log
 import Utils
-from Utils import root_dir
+from Utils import root_dir, load_data_svhn
 
 
 def parse_args():
@@ -50,11 +50,11 @@ class MyConfig(object):
     cache_data = None
 
     def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True,
-                 dataset_type='cifar10', debug = False):
+                 dataset_type='cifar10', max_pooling_cnt=0, debug = False):
         # for all model:
         self.dataset_type = dataset_type
         self.limit_data = limit_data
-        if dataset_type == 'cifar10':
+        if dataset_type == 'cifar10' or dataset_type == 'svhn' or dataset_type == 'cifar100':
             self.input_shape = (32, 32, 3)
         else:
             self.input_shape = (28, 28, 1)
@@ -80,7 +80,7 @@ class MyConfig(object):
         self.set_logger_path(self.name + '.csv')
         self.debug = debug
         self.max_pooling_limit = int(log(min(self.input_shape[0], self.input_shape[1]), 2)) - 2
-        self.max_pooling_cnt = 0
+        self.max_pooling_cnt = max_pooling_cnt
 
         self.model_max_conv_width = 1024
         self.model_min_conv_width = 128
@@ -100,8 +100,8 @@ class MyConfig(object):
 
     def copy(self, name='diff_name'):
         new_config = MyConfig(self.epochs, self.verbose, limit_data=self.limit_data, name=name,
-                              evoluation_time=self.evoluation_time, dataset_type=self.dataset_type)
-        new_config.max_pooling_cnt=self.max_pooling_cnt
+                              evoluation_time=self.evoluation_time, dataset_type=self.dataset_type,
+                              max_pooling_cnt=self.max_pooling_cnt)
         return new_config
 
     def set_name(self, name, clean=True):
@@ -134,8 +134,12 @@ class MyConfig(object):
         if MyConfig.cache_data is None:
             if type == 'cifar10':
                 (train_x, train_y), (test_x, test_y) = cifar10.load_data()
-            else:
+            elif type == 'mnist':
                 (train_x, train_y), (test_x, test_y) = mnist.load_data()
+            elif type == 'cifar100':
+                (train_x, train_y), (test_x, test_y) = cifar100.load_data(label_mode='fine')
+            elif type == 'svhn':
+                (train_x, train_y), (test_x, test_y) = load_data_svhn()
             train_x, mean_img = self._preprocess_input(train_x, None)
             test_x, _ = self._preprocess_input(test_x, mean_img)
 
