@@ -13,6 +13,7 @@ from keras.utils.conv_utils import convert_kernel
 from Config import MyConfig
 from Logger import logger
 from Model import MyModel, MyGraph, Node
+from keras.models import Model
 
 
 class Net2Net(object):
@@ -48,8 +49,7 @@ class Net2Net(object):
         topo_nodes = nx.topological_sort(model.graph)
         names = [node.name
                  for node in topo_nodes
-                 if node.type == 'Conv2D' or node.type == 'Conv2D_Pooling']
-
+                 if node.type == 'Conv2D' or node.type == 'Conv2D_Pooling' or node.type == 'Group']#support group layer to wider
         max_iter = 100
         for i in range(max_iter + 1):
             if i == max_iter:
@@ -59,7 +59,7 @@ class Net2Net(object):
             choice = names[np.random.randint(0, len(names) - 1)]
             cur_node = model.graph.get_nodes(choice)[0]
             next_nodes = model.graph.get_nodes(choice, next_layer=True, last_layer=False)
-            if 'Conv2D' in [node.type for node in next_nodes]:
+            if 'Conv2D' in [node.type for node in next_nodes] or 'Conv2D_Pooling' in [node.type for node in next_nodes]:
                 break
             else:
                 continue
@@ -70,16 +70,22 @@ class Net2Net(object):
                         + config.model_min_conv_width
         width_ratio = np.random.rand()
         new_width = int (cur_width + width_ratio * (max_cur_width - cur_width))
+        if cur_node.type == 'Group':
+            # make sure that new_width % group_num == 0
+            new_width = new_width // cur_node.config['group_num'] *  cur_node.config['group_num']
+
         if new_width <= cur_width:
             logger.info('{} layer\'s width up to limit!'.format(choice))
             return model
         logger.info('choose {} to wider'.format(choice))
-        return self.wider_conv2d(model, layer_name=choice, new_width=new_width, config=config)
+        if cur_node.type == 'Group':
+            return self.wider_group_conv2d(model, layer_name=choice, new_width=new_width, config=config)
+        else:
+            return self.wider_conv2d(model, layer_name=choice, new_width=new_width, config=config)
 
     '''
         TODO: random choose two layer to skip 
     '''
-
     def add_skip(self, model, config):
         assert nx.is_directed_acyclic_graph(model.graph)
         topo_nodes = nx.topological_sort(model.graph)
@@ -266,6 +272,62 @@ class Net2Net(object):
 
         return new_model
 
+    def wider_group_conv2d(self, model, layer_name, new_width, config):
+        # modify graph
+        new_graph = model.graph.copy()
+        node = new_graph.get_nodes(layer_name)[0]
+        assert node.type == 'Group', 'must wide a group layer'
+        node.config['filters'] = new_width
+
+        new_model = MyModel(config=config, graph=new_graph)
+        self.copy_weight(model, new_model)
+
+        filter_num = int(new_width / node.config['group_num'])
+
+        for i in range(node.config['group_num']):
+            if i == node.config['group_num'] - 1:  # last group
+                filter_num = new_width - i * int((new_width / node.config['group_num']))
+
+            layer_name_conv_1 = layer_name + '_conv2d_' + str(i) + '_1'
+            layer_name_conv_2 = layer_name + '_conv2d_' + str(i) + '_2'
+
+            #use keras get_layer function
+            w_conv1, b_conv1 = model.model.get_layer(layer_name_conv_1).get_weights()
+            w_conv2, b_conv2 = model.model.get_layer(layer_name_conv_2).get_weights()
+            new_w_conv1, new_b_conv1, new_w_conv2 = Net2Net._wider_conv2d_weight(
+                w_conv1, b_conv1, w_conv2, filter_num, "net2wider")
+
+            new_model.model.get_layer(layer_name_conv_1).set_weights([new_w_conv1, new_b_conv1])
+            #new_model.model.get_layer(layer_name_conv_2).set_weights([new_w_conv2, b_conv2])
+
+            if i == 0:
+                w_conv_group = new_w_conv2
+                b_conv_group = b_conv2
+            else:
+                w_conv_group = np.concatenate((w_conv_group, new_w_conv2), axis = 3)
+                b_conv_group = np.concatenate((b_conv_group, b_conv2), axis=0)
+
+        #find group layer's next conv layer
+        w_conv2, b_conv2 = model.get_layers(layer_name, next_layer=True, type=['Conv2D', 'Group'])[0].get_weights()
+
+        new_w_conv_group, new_b_conv_group, new_w_conv2 = Net2Net._wider_conv2d_weight(
+            w_conv_group, b_conv_group, w_conv2, new_width, "net2wider")
+
+        for i in range(node.config['group_num']):
+            layer_name_conv_2 = layer_name + '_conv2d_' + str(i) + '_2'
+
+            if i == node.config['group_num'] - 1:
+                new_model.model.get_layer(layer_name_conv_2).set_weights([new_w_conv_group[:, :, :, i * filter_num : ],
+                                                                      new_b_conv_group[i * filter_num : ]])
+            else:
+                new_model.model.get_layer(layer_name_conv_2).set_weights([new_w_conv_group[:, :, :, i * filter_num : (i+1) * filter_num],
+                                                                      new_b_conv_group[i * filter_num : (i+1) * filter_num]])
+
+        new_model.get_layers(layer_name, next_layer=True, type=['Conv2D', 'Group'])[0].set_weights([new_w_conv2, b_conv2])
+
+        return new_model
+
+
     # deeper from group layer or conv layer
     def deeper_conv2d(self, model, layer_name, config, with_pooling, kernel_size=3, filters='same'):
         # construct graph
@@ -390,9 +452,13 @@ class Net2Net(object):
 
 
 if __name__ == "__main__":
-    config = MyConfig(epochs=1, verbose=1, limit_data=True, name='before', dataset_type='cifar10')
+    config = MyConfig(epochs=10, verbose=1, limit_data=False, name='before', dataset_type='cifar10')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 64}],
                ["MaxPooling2D", 'maxpooling2d1', {}],
+               ["Group", 'Group1', {'filters' : 64, 'group_num' : 4}],
+               ["MaxPooling2D", 'maxpooling2d2', {}],
+               ["Conv2D", 'Conv2D2', {'filters': 256}],
+               ["MaxPooling2D", 'maxpooling2d3', {}],
                ["Conv2D", 'Conv2D3', {'filters': 10}],
                ['GlobalMaxPooling2D', 'GlobalMaxPooling2D1', {}],
                ['Activation', 'Activation1', {'activation_type': 'softmax'}]]
@@ -402,8 +468,8 @@ if __name__ == "__main__":
 
     net2net = Net2Net()
 
-    model = net2net.deeper_conv2d(before_model, layer_name='Group1', config=config.copy('deeper2'), with_pooling=True)
-    model.vis()
+    model = net2net.wider_group_conv2d(before_model, layer_name='Group1', new_width=128, config=config.copy('wider_group'))
+    model.comp_fit_eval()
 
     '''
     model = net2net.deeper(before_model, config=config.copy('deeper1'))

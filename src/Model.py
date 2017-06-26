@@ -263,8 +263,10 @@ class MyGraph(nx.DiGraph):
                 layer_output_tensor = layer(layer_input_tensor)
                 if node.type in ['Conv2D', 'Conv2D_Pooling', 'Group']:
                     self.update(), graph_helper.update()
-                    MAX_DP, MIN_DP = .5, .01
-                    ratio_dp = - (MAX_DP - MIN_DP) / self.max_depth * node.depth + MAX_DP
+                    #MAX_DP, MIN_DP = .35, .01
+                    #ratio_dp = - (MAX_DP - MIN_DP) / self.max_depth * node.depth + MAX_DP
+                    #use fixed drop out ratio
+                    ratio_dp = 0.30
                     layer_output_tensor = keras.layers.Dropout(ratio_dp)(layer_output_tensor)
                     # logger.debug('layer {} ratio of dropout {}'.format(node.name, ratio_dp))
 

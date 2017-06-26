@@ -55,7 +55,7 @@ class GA(object):
             stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d2')(stem_conv_0)
         import keras
         stem_conv_1 = keras.layers.MaxPooling2D(name='maxpooling2d1')(stem_conv_1)
-        stem_conv_1 = Conv2D(10, 3, padding='same', name='conv2d3')(stem_conv_1)
+        stem_conv_1 = Conv2D(self.gl_config.nb_class, 3, padding='same', name='conv2d3')(stem_conv_1)
         stem_global_pooling_1 = GlobalMaxPooling2D(name='globalmaxpooling2d1')(stem_conv_1)
         stem_softmax_1 = Activation('softmax', name='activation1')(stem_global_pooling_1)
 
@@ -88,7 +88,10 @@ class GA(object):
         return model_list
 
     def get_curr_config(self, parent_config=None):
-        name = 'ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind)
+        if hasattr(self, 'evolution_choice'):
+            name = 'ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind) + '_' +self.evolution_choice
+        else:
+            name = 'ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind)
         if parent_config is None:
             return self.gl_config.copy(name)
         else:
@@ -113,11 +116,11 @@ class GA(object):
 
         weight = {}
         if 'deeper_with_pooling' in evolution_choice_list:
-            weight['deeper_with_pooling'] = int(model_max_depth - model_max_depth / (2 * max_pooling_limit) * max_pooling_cnt)
+            weight['deeper_with_pooling'] = int(model_max_depth - model_max_depth / (2 * max_pooling_limit) * max_pooling_cnt) * 3
         if 'deeper' in evolution_choice_list:
             weight['deeper'] = model_max_depth / 2
         if 'wider' in evolution_choice_list:
-            weight['wider'] = model_max_depth / 2
+            weight['wider'] = model_max_depth / 2 * 2
         if 'add_skip' in evolution_choice_list:
             weight['add_skip'] = model_depth / 2
         if 'add_group' in evolution_choice_list:
@@ -135,13 +138,15 @@ class GA(object):
         self.iter += 1
         for name, before_model in self.population.items():
             self.max_ind += 1
-            new_config = self.get_curr_config(before_model.config)
             suceeded = False
             while not suceeded:
                 # TODO: there are still some problems with deeper_with_pooling operation
                 evolution_choice_list = ['deeper_with_pooling', 'deeper', 'wider', 'add_skip', 'add_group']
                 weight = self.calc_choice_weight(evolution_choice_list, before_model)
                 evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_list, weight)]
+
+                logger.info("evolution choice {}".format(evolution_choice))
+                self.evolution_choice = evolution_choice
 
                 # maxpooling layers have limit numbers
                 # todo: modified new_config and child_config should inherit from parent_config
@@ -150,11 +155,12 @@ class GA(object):
                         logger.warning('max_pooling layer up to limit, choose other evolution_choise')
                         continue
                     else:
+                        new_config = self.get_curr_config(before_model.config)
                         new_config.max_pooling_cnt = before_model.config.max_pooling_cnt + 1
                 else:
+                    new_config = self.get_curr_config(before_model.config)
                     new_config.max_pooling_cnt = before_model.config.max_pooling_cnt
 
-                logger.info("evolution choice {}".format(evolution_choice))
                 # try:
                 if evolution_choice == 'deeper':
                     after_model = self.net2net.deeper(before_model, config=new_config, with_pooling=False)
@@ -265,11 +271,11 @@ if __name__ == "__main__":
     dbg = True
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=20)
+        gl_config = MyConfig(epochs=10, verbose=2, limit_data=False, name='ga', evoluation_time=20, dataset_type='cifar10')
         nb_inv = 1
     else:
         parallel = False
-        gl_config = MyConfig(epochs=50, verbose=2, limit_data=True, name='ga', evoluation_time=10, dataset_type='mnist')
+        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=10, dataset_type='mnist')
         nb_inv = 6
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()
