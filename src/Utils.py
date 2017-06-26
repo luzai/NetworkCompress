@@ -6,18 +6,16 @@ import keras
 import keras.backend as K
 import matplotlib
 import numpy as np
-import tensorflow as tf
-import pdb
+
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import networkx as nx
 import os.path as osp
 from Logger import logger
-from keras.utils import vis_utils
+
 import random
 from IPython import embed
 
-# from Init import root_dir
 root_dir = osp.normpath(
     osp.join(osp.dirname(__file__), "..")
 )
@@ -45,6 +43,7 @@ def choice_dict_keep_latest(mdict, size):
     assert 'latest' in locals().keys()
     return latest
 
+
 def weight_choice(list, weight_dict):
     weight = []
     for element in list:
@@ -53,11 +52,6 @@ def weight_choice(list, weight_dict):
     weight = np.array(weight).astype('float')
     weight = weight / weight.sum()
     return int(np.random.choice(range(len(weight)), p=weight))
-    # t = random.randint(0, sum(weight) - 1)
-    # for i, val in enumerate(weight):
-    #     t -= val
-    #     if t < 0:
-    #         return i
 
 
 # descrapted
@@ -70,30 +64,33 @@ def list2dict(mlist):
 
 
 def mkdir_p(name, delete=True):
-    # TODO it is not good for debug, but non-delete will also cause resource race
+    # it is not good for debug, but non-delete will also cause resource race
+    import tensorflow as tf
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     if delete and tf.gfile.Exists(name):
         tf.gfile.DeleteRecursively(name)
     tf.gfile.MakeDirs(name)
 
 
 def i_vis_model(model):
+    from keras.utils import vis_utils
     SVG(vis_utils.model_to_dot(model, show_shapes=True).create(prog='dot', format='svg'))
 
 
 def vis_model(model, name='net2net', show_shapes=True):
+    from keras.utils import vis_utils
     path = osp.dirname(name)
     name = osp.basename(name)
     if path == '':
         path = name
-    mkdir_p(osp.join(root_dir, "output", path), delete=False)
-    os.chdir(osp.join(root_dir, "output", path))
-    keras.models.save_model(model, name + '.h5')
+    sav_path = osp.join(root_dir, "output", path)
+    mkdir_p(sav_path, delete=False)
+    keras.models.save_model(model, osp.join(sav_path, name + '.h5'))
     try:
-        vis_utils.plot_model(model, to_file=name + '.pdf', show_shapes=show_shapes)
-        vis_utils.plot_model(model, to_file=name + '.png', show_shapes=show_shapes)
+        vis_utils.plot_model(model, to_file=osp.join(sav_path, name + '.pdf'), show_shapes=show_shapes)
+        vis_utils.plot_model(model, to_file=osp.join(sav_path, name + '.png'), show_shapes=show_shapes)
     except Exception as inst:
         logger.error("cannot keras.plot_model {}".format(inst))
-    os.chdir(osp.join(root_dir, 'src'))
 
 
 def vis_graph(graph, name='net2net', show=False):
@@ -102,6 +99,7 @@ def vis_graph(graph, name='net2net', show=False):
     if path == '':
         path = name
     mkdir_p(osp.join(root_dir, "output", path), delete=False)
+    restore_path = os.getcwd()
     os.chdir(osp.join(root_dir, "output", path))
     with open(name + "_graph.json", "w") as f:
         f.write(graph.to_json())
@@ -114,16 +112,23 @@ def vis_graph(graph, name='net2net', show=False):
         # plt.close('all')
     except Exception as inst:
         logger.warning(inst)
-    os.chdir(osp.join(root_dir, 'src'))
+    os.chdir(restore_path)
 
 
 def nvidia_smi():
     proc = subprocess.Popen("nvidia-smi --query-gpu=index,memory.free --format=csv".split()
-                            , stdout=subprocess.PIPE, shell=True)
+                            , stdout=subprocess.PIPE)
     (out, err) = proc.communicate()
-    res = re.findall(r'\s+(\d+)MiB', out)
-    res = [int(val) for val in res]
-    return res
+    free = re.findall(r'0,\s+(\d+)\s+MiB', out)
+    free = [int(val) for val in free]
+    proc = subprocess.Popen("nvidia-smi --query-gpu=index,memory.total --format=csv".split()
+                            , stdout=subprocess.PIPE)
+    (out, err) = proc.communicate()
+    ttl= re.findall(r'0,\s+(\d+)\s+MiB', out)
+    ttl = [int(val) for val in ttl]
+
+    ratio = float(max(free))/max(ttl)
+    return ratio
 
 
 def count_weight(model):
@@ -135,6 +140,8 @@ def count_weight(model):
 
 
 def print_graph_info():
+    import tensorflow as tf
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     graph = tf.get_default_graph()
     graph.get_tensor_by_name("Placeholder:0")
     layers = [op.name for op in graph.get_operations() if op.type == "Placeholder"]
@@ -147,6 +154,9 @@ def print_graph_info():
 
 def i_vis_graph(graph_def, max_const_size=32):
     """Visualize TensorFlow graph."""
+    import tensorflow as tf
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
     if hasattr(graph_def, 'as_graph_def'):
         graph_def = graph_def.as_graph_def()
     strip_def = strip_consts(graph_def, max_const_size=max_const_size)
@@ -170,6 +180,9 @@ def i_vis_graph(graph_def, max_const_size=32):
 
 def strip_consts(graph_def, max_const_size=32):
     """Strip large constant values from graph_def."""
+    import tensorflow as tf
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
     strip_def = tf.GraphDef()
     for n0 in graph_def.node:
         n = strip_def.node.add()
@@ -182,16 +195,23 @@ def strip_consts(graph_def, max_const_size=32):
     return strip_def
 
 
+def add_indent(str):
+    import re
+    return re.sub('\n', '\n\t\t', str)
+
+
 def to_single_dir():
+    restore_path = os.getcwd()
     os.chdir(root_dir)
     for parent, dirnames, filenames in os.walk('output/tf_tmp'):
         filenames = sorted(filenames)
-        if len(filenames)==1:
+        if len(filenames) == 1:
             continue
         for ind, fn in enumerate(filenames):
             subprocess.call(('mkdir -p ' + parent + '/' + str(ind)).split())
             subprocess.call(('mv ' + parent + '/' + fn + ' ' + parent + '/' + str(ind) + '/').split())
         print parent, filenames
+    os.chdir(restore_path)
 
 
 def load_data_svhn():
@@ -199,13 +219,13 @@ def load_data_svhn():
     import os.path
     import commands
 
-    if os.path.isdir('../data/SVHN') == False:
-        os.mkdir('../data/SVHN')
+    if os.path.isdir(osp.join(root_dir, 'data/SVHN')) == False:
+        os.mkdir(osp.join(root_dir, 'data/SVHN'))
 
     data_set = []
-    if os.path.isfile('../data/SVHN/train_32x32.mat') == False:
+    if os.path.isfile(osp.join(root_dir, 'data/SVHN/train_32x32.mat')) == False:
         data_set.append("train")
-    if os.path.isfile('../data/SVHN/test_32x32.mat') == False:
+    if os.path.isfile(osp.join(root_dir, 'data/SVHN/test_32x32.mat')) == False:
         data_set.append("test")
 
     try:
@@ -218,18 +238,18 @@ def load_data_svhn():
         print('please install requests and tqdm package first.')
 
     for set in data_set:
-        print ('download SVHN ' + set + ' data, Please wait.' )
+        print ('download SVHN ' + set + ' data, Please wait.')
         url = "http://ufldl.stanford.edu/housenumbers/" + set + "_32x32.mat"
         response = requests.get(url, stream=True)
-        with open("../data/SVHN/" + set + "_32x32.mat", "wb") as handle:
+        with open("data/SVHN/" + set + "_32x32.mat", "wb") as handle:
             for data in tqdm(response.iter_content()):
                 handle.write(data)
 
-    train_data = sio.loadmat('../data/SVHN/train_32x32.mat')
+    train_data = sio.loadmat(root_dir + '/data/SVHN/train_32x32.mat')
     train_x = train_data['X']
     train_y = train_data['y']
 
-    test_data = sio.loadmat('../data/SVHN/test_32x32.mat')
+    test_data = sio.loadmat(root_dir + '/data/SVHN/test_32x32.mat')
     test_x = test_data['X']
     test_y = test_data['y']
 

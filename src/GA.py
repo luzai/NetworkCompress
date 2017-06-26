@@ -27,7 +27,6 @@ class GA(object):
         self.max_ind = 0
         self.iter = 0
         self.nb_inv = nb_inv  # 10 later
-        self.queue = mp.Queue(self.nb_inv * 2)
 
     '''
         define original init model 
@@ -101,6 +100,7 @@ class GA(object):
         3. add_group and add_skip operation's weight can rise if they haven't been chosen for a long time
         more principles to discuss, however more principles means more prior knowledge, may reduce randomness
     '''
+
     def calc_choice_weight(self, evolution_choice_list, model):
         model_depth = 0
         for node in nx.topological_sort(model.graph):
@@ -113,7 +113,8 @@ class GA(object):
 
         weight = {}
         if 'deeper_with_pooling' in evolution_choice_list:
-            weight['deeper_with_pooling'] = int(model_max_depth - model_max_depth / (2 * max_pooling_limit) * max_pooling_cnt)
+            weight['deeper_with_pooling'] = int(
+                model_max_depth - model_max_depth / (2 * max_pooling_limit) * max_pooling_cnt)
         if 'deeper' in evolution_choice_list:
             weight['deeper'] = model_max_depth / 2
         if 'wider' in evolution_choice_list:
@@ -123,8 +124,8 @@ class GA(object):
         if 'add_group' in evolution_choice_list:
             weight['add_group'] = model_depth / 2
 
-        #choice_len = len(evolution_choice_list)
-        #return [1] * choice_len # equal weight now
+        # choice_len = len(evolution_choice_list)
+        # return [1] * choice_len # equal weight now
         return weight
 
     def mutation_process(self):
@@ -142,7 +143,7 @@ class GA(object):
                 evolution_choice_list = ['deeper_with_pooling', 'deeper', 'wider', 'add_skip', 'add_group']
                 weight = self.calc_choice_weight(evolution_choice_list, before_model)
                 evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_list, weight)]
-
+                evolution_choice = 'deeper'
                 # maxpooling layers have limit numbers
                 # todo: modified new_config and child_config should inherit from parent_config
                 if evolution_choice == 'deeper_with_pooling':
@@ -184,16 +185,13 @@ class GA(object):
             self.population[after_model.config.name] = after_model
 
     def train_process(self):
-        clients = []
-
+        client = GAClient.Client()
         for model in self.population.values():
-
             # if getattr(model, 'parent', None) is not None:
             # has parents means muatetion and weight change, so need to save weights
             keras.models.save_model(model.model, model.config.model_path)
 
-            d = dict(
-                queue=self.queue,
+            kwargs = dict(
                 name=model.config.name,
                 epochs=model.config.epochs,
                 verbose=model.config.verbose,
@@ -201,31 +199,15 @@ class GA(object):
                 dataset_type=model.config.dataset_type
             )
             if parallel:
-                c = mp.Process(target=GAClient.run_self, kwargs=d)
-                c.start()
-                time.sleep(np.random.choice([0, 5, 10]))
-                clients.append(c)
+                client.run_self(kwargs)
             else:
-                GAClient.run(**d)
-                d = self.queue.get()
-                name = d[0]
-                score = d[1]
+                name, score = GAClient.run(**kwargs)
                 setattr(self.population[name], 'score', score)
 
         if parallel:
-            cnt = 0
-            for c in clients:
-                c.join()
-            while not self.queue.empty():
-                d = self.queue.get()
-                name = d[0]
-                score = d[1]
+            client.wait()
+            for name, score in client.scores.items():
                 setattr(self.population[name], 'score', score)
-                cnt += 1
-            if cnt != len(clients):
-                from IPython import embed
-                embed()
-                time.sleep(-1)
 
     def ga_main(self):
         for i in range(self.nb_inv):
@@ -253,6 +235,7 @@ class GA(object):
             return
 
         for model in self.population.values():
+            # print model.config.name, model.score
             assert hasattr(model, 'score'), 'to eval we need score'
         self.population = Utils.choice_dict(self.population, self.nb_inv)
 
@@ -262,14 +245,15 @@ class GA(object):
 
 if __name__ == "__main__":
     global parallel, dbg
-    dbg = True
+    dbg = False
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=20)
-        nb_inv = 1
+        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=10)
+        nb_inv = 2
     else:
-        parallel = False
-        gl_config = MyConfig(epochs=50, verbose=2, limit_data=True, name='ga', evoluation_time=10, dataset_type='mnist')
-        nb_inv = 6
+        parallel = True
+        gl_config = MyConfig(epochs=1, verbose=2, limit_data=False, name='ga', evoluation_time=10,
+                             dataset_type='cifar10')
+        nb_inv = 5
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()

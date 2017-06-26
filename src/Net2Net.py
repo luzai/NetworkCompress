@@ -4,6 +4,8 @@ from __future__ import division
 from __future__ import print_function
 
 import keras.backend as K
+import os
+
 import networkx as nx
 import numpy as np
 import scipy
@@ -13,7 +15,7 @@ from keras.utils.conv_utils import convert_kernel
 from Config import MyConfig
 from Logger import logger
 from Model import MyModel, MyGraph, Node
-
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 class Net2Net(object):
     @staticmethod
