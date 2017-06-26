@@ -13,30 +13,8 @@ from keras.datasets import cifar10, mnist, cifar100
 from math import log
 import Utils
 from Utils import root_dir, load_data_svhn
+import os
 
-
-def parse_args():
-    """Parse input arguments."""
-    parser = argparse.ArgumentParser(description='net work compression')
-    parser.add_argument('--epoch', dest='nb_epoch', help='number epoch',
-                        default=150, type=int)
-    parser.add_argument("--teacher-epoch", dest="nb_teacher_epoch", help="number teacher epoch",
-                        default=50, type=int)
-    parser.add_argument('--verbose', dest='gl_verbose', help="global verbose",
-                        default=1, type=int)
-    parser.add_argument('--cpu', dest='cpu_mode',
-                        help='Use CPU mode (overrides --gpu)',
-                        action='store_true')
-    parser.add_argument("--dbg", dest="dbg",
-                        help="for dbg",
-                        action="store_true")
-    parser.add_argument('--gpu', dest='gpu_id', help='gpu id',
-                        default=0, type=int)
-    _args = parser.parse_args()
-    return _args
-
-
-# args=parse_args()
 
 class MyConfig(object):
     # for all model
@@ -64,7 +42,7 @@ class MyConfig(object):
             self.load_data(9999, type=self.dataset_type)
         else:
             self.load_data(1, type=self.dataset_type)
-
+        print('load data: x shape {}, y shape {}'.format(self.dataset['train_x'].shape, self.dataset['train_y'].shape))
         # for ga:
         self.evoluation_time = evoluation_time
 
@@ -75,7 +53,7 @@ class MyConfig(object):
         self.verbose = verbose
         self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
                                             min_lr=0.5e-7)
-        self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
+        self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5)
         self.csv_logger = None
         self.set_logger_path(self.name + '.csv')
         self.debug = debug
@@ -140,6 +118,7 @@ class MyConfig(object):
                 (train_x, train_y), (test_x, test_y) = cifar100.load_data(label_mode='fine')
             elif type == 'svhn':
                 (train_x, train_y), (test_x, test_y) = load_data_svhn()
+
             train_x, mean_img = self._preprocess_input(train_x, None)
             test_x, _ = self._preprocess_input(test_x, mean_img)
 

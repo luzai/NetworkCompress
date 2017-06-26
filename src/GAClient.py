@@ -2,23 +2,97 @@ import argparse
 import multiprocessing as mp
 import os
 import subprocess
-import time
+import time, Utils
 
 import numpy as np
 import os.path as osp
 from Model import IdentityConv, GroupIdentityConv
 from Logger import logger
 
-dbg = False
 root_dir = osp.normpath(
     osp.join(osp.dirname(__file__), "..")
 )
+NOMEM = 100
 
 
-def run(queue, name, epochs=100, verbose=1, limit_data=False, dataset_type='cifar10'):
+class Client:
+    PATH = "/new_disk_1/luzai/App/mpy/bin:/home/vipa-spark/luzai/anaconda/bin:"
+    os.environ['PATH'] = PATH + os.environ['PATH']
+    my_env = os.environ.copy()
+
+    def __init__(self):
+        self.max_run = 6
+        self.run = 0
+        self.tasks = {}
+        self.kwargs = {}
+        self.scores = {}
+
+    def run_self(self, kwarg):
+        name, epochs, verbose, limit_data, dataset_type = kwarg['name'], kwarg['epochs'], kwarg['verbose'], kwarg[
+            'limit_data'], kwarg['dataset_type']
+        self.kwargs[name] = kwarg
+        logger.debug('deploy the task with kwarg {}'.format(kwarg))
+        self.tasks[name] = subprocess.Popen(("python " + osp.join(root_dir, 'src', 'GAClient.py')
+                                             + " -n " + name +
+                                             " -e " + str(epochs) +
+                                             " -v " + str(verbose) +
+                                             " -l " + str(int(limit_data)) +
+                                             " -d " + dataset_type).split(),
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                            env=Client.my_env)
+        time.sleep(5)
+        self.run += 1
+
+    def wait(self):
+        for name, task in self.tasks.items():
+            returncode = task.wait()
+            stdout, stderr = task.communicate()
+            stdout = Utils.add_indent(stdout)
+            stderr = Utils.add_indent(stderr)
+            if returncode == 0:
+                name, score = self.parse_score(stdout)
+                self.scores[name] = score
+                logger.info('model {} Fit success with score {}'.format(name, score))
+                logger.info('success stdout is {}'.format(stdout))
+                self.run -= 1
+            else:
+                while returncode != 0:
+                    # self.max_run -= 1
+                    if Utils.nvidia_smi() < .2:
+                        time.sleep(10)
+                    logger.info('fit fail return code is {}'.format(returncode))
+                    if returncode != NOMEM:
+                        logger.error(
+                            'some unknown error maybe no enough mem' +
+                            'stderr ==>  {1}, stdout ==> {0}'.format(stdout,
+                                                                     stderr))
+
+                    kwarg = self.kwargs[name]
+                    self.run_self(kwarg)
+                    returncode = self.tasks[name].wait()
+                stdout, stderr = self.tasks[name].communicate()
+                stdout = Utils.add_indent(stdout)
+                stderr = Utils.add_indent(stderr)
+                name, score = self.parse_score(stdout)
+                self.scores[name] = score
+                logger.info('model {} Fit success with score {}'.format(name, score))
+                logger.info('success stdout is {}'.format(stdout))
+                self.run -= 1
+
+    @staticmethod
+    def parse_score(stdout):
+        import re
+        name_ = re.findall(r'NAME:\s+(.*)', stdout)[0]
+        score = float(re.findall(r'SCORE:\s+(.*)', stdout)[0])
+        return name_, score
+
+
+def run(name, epochs=100, verbose=1, limit_data=False, dataset_type='cifar10'):
     try:
         import keras
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         import tensorflow as tf
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         from Config import MyConfig
         from Model import MyModel
         from keras.utils.generic_utils import get_custom_objects
@@ -35,88 +109,46 @@ def run(queue, name, epochs=100, verbose=1, limit_data=False, dataset_type='cifa
             # device = 0
             # with tf.device(device):
             model = MyModel(config=config, model=keras.models.load_model(config.model_path))
+            logger.debug('model {} start fit epochs {}'.format(name, epochs))
             score = model.comp_fit_eval()
             keras.models.save_model(model.model, model.config.model_path)
-            queue.put((name, score))
+            return name, score
+
     except Exception as inst:
         print 'INST is'
         print str(inst)
-        errors = ['ResourceExhaustedError', 'Resource exhausted: OOM', 'OOM', 'Failed to create session'
-                'CUDNN_STATUS_INTERNAL_ERROR', 'Chunk','CUDA_ERROR_OUT_OF_MEMORY']
+        errors = ['ResourceExhaustedError',
+                  'Resource exhausted: OOM',
+                  'OOM', 'Failed to create session',
+                  'CUDNN_STATUS_INTERNAL_ERROR', 'Chunk',
+                  'CUDA_ERROR_OUT_OF_MEMORY']
         for error in errors:
             if error in str(inst):
-                queue.put((None, None))
-                exit(100)
-        exit(200)
-
-
-def run_self(queue, name, epochs=100, verbose=1, limit_data=False, dataset_type='cifar10'):
-    PATH = "/new_disk_1/luzai/App/mpy/bin:"
-    os.environ['PATH'] = PATH + os.environ['PATH']
-    # subprocess.call("which python".split())
-    my_env = os.environ.copy()
-    # todo may return : 1. mem not enough 2. model cannot fit
-
-    returncode = 100
-    while returncode != 0:
-        child1 = subprocess.Popen(("python " + osp.join(root_dir, 'src', 'GAClient.py')
-                                   + " -n " + name +
-                                   " -e " + str(epochs) +
-                                   " -v " + str(verbose) +
-                                   " -l " + str(int(limit_data)) +
-                                   " -d " + dataset_type).split(),
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                  env=my_env)
-        # subprocess.call(("python " + osp.join(root_dir, 'src', 'GAClient.py')
-        #                            + " -n " + name +
-        #                            " -e " + str(epochs) +
-        #                            " -v " + str(verbose)).split())
-        returncode = child1.wait()
-        logger.info('returncode is {}'.format(returncode))
-        stdout, stderr = child1.communicate()
-        if returncode == 100 or returncode == -6:
-            logger.info('No enough mem, model {} wait for 5min'.format(name))
-            if dbg:
-                time.sleep(10)
-            else:
-                time.sleep(np.random.choice([10, 30, 60]))
-            logger.info('5 min passed, {} Continue try'.format(name))
-        elif returncode == 0:
-            logger.info('model {} Fit Success'.format(name))
-            break
-        else:
-            logger.error('UNKNOWN except stderr is {1} stdout is {0} Maybe just not enough mem, have another try'.format(stdout, stderr))
-    print stdout  # , stderr
-    import re
-    name_ = re.findall(r'NAME:\s+(.*)', stdout)[0]
-    score = float(re.findall(r'SCORE:\s+(.*)', stdout)[0])
-    assert 'name_' in locals(), '{}{}'.format(returncode, name)
-
-    queue.put((name_, score))
-
-
-def parse_args():
-    """Parse input arguments."""
-    parser = argparse.ArgumentParser(description='run client')
-    parser.add_argument('-n', dest='name', type=str)
-    parser.add_argument('-e', dest='epochs', type=int)
-    parser.add_argument('-v', dest='verbose', type=int)
-    parser.add_argument('-l', dest='limit_data', type=int)
-    parser.add_argument('-d', dest='dataset_type', type=str)
-    args = parser.parse_args()
-
-    return args
+                return NOMEM, NOMEM
+        return None, None
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    main_queue = mp.Queue()
-    with open('gaclient', 'w') as f:
-        f.write(str(args))
+    def parse_args():
+        """Parse input arguments."""
+        parser = argparse.ArgumentParser(description='run client')
+        parser.add_argument('-n', dest='name', type=str)
+        parser.add_argument('-e', dest='epochs', type=int)
+        parser.add_argument('-v', dest='verbose', type=int)
+        parser.add_argument('-l', dest='limit_data', type=int)
+        parser.add_argument('-d', dest='dataset_type', type=str)
+        args = parser.parse_args()
+        return args
 
-    run(queue=main_queue, name=args.name, epochs=args.epochs, verbose=args.verbose, limit_data=args.limit_data,
-        dataset_type=args.dataset_type)
-    d = main_queue.get()
-    print 'NAME: ', d[0]
-    print 'SCORE: {:.13f}'.format(d[1])
-    exit(0)
+
+    args = parse_args()
+    name, score = run(name=args.name, epochs=args.epochs, verbose=args.verbose, limit_data=args.limit_data,
+                      dataset_type=args.dataset_type)
+    if name is None:
+        exit(200)
+    elif name == NOMEM:
+        exit(NOMEM)
+    else:
+        print 'NAME: ', name
+        print 'SCORE: {:.13f}'.format(score)
+        exit(0)

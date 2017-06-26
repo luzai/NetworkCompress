@@ -1,6 +1,7 @@
 # Dependenct: Utils, Config
 import json
 from IPython import embed
+import os
 import keras
 import networkx as nx
 import numpy as np
@@ -18,6 +19,8 @@ import Utils
 from Utils import vis_graph, vis_model
 from Config import MyConfig
 from Logger import logger
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 class IdentityConv(Initializer):
@@ -167,7 +170,7 @@ class MyGraph(nx.DiGraph):
         if new_node.config['filters'] == 'same':
             new_node.config['filters'] = node.config['filters']
 
-        #there maybe multiple next_node, for example, next_layer is a skip layer or group layer
+        # there maybe multiple next_node, for example, next_layer is a skip layer or group layer
         for next_node in next_nodes:
             self.remove_edge(node, next_node)
             self.add_edge(node, new_node)
@@ -188,7 +191,8 @@ class MyGraph(nx.DiGraph):
                 tower = Conv2D(filters, (1, 1), name=name + '_conv2d_0_1', padding='same',
                                kernel_initializer=IdentityConv())(input)
                 tower = Conv2D(filters, (3, 3), name=name + '_conv2d_0_2', padding='same',
-                               kernel_initializer=IdentityConv(), activation='relu', kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(tower)
+                               kernel_initializer=IdentityConv(), activation='relu',
+                               kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(tower)
                 return tower
             else:
                 group_output = []
@@ -201,7 +205,8 @@ class MyGraph(nx.DiGraph):
                     tower = Conv2D(filter_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same',
                                    kernel_initializer=GroupIdentityConv(i, group_num))(input)
                     tower = Conv2D(filter_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same',
-                                   kernel_initializer=IdentityConv(), activation='relu', kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(tower)
+                                   kernel_initializer=IdentityConv(), activation='relu',
+                                   kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(tower)
                     group_output.append(tower)
 
                 if K.image_data_format() == 'channels_first':
@@ -214,7 +219,7 @@ class MyGraph(nx.DiGraph):
 
         return f
 
-    def to_model(self, input_shape, name="default_for_op", kernel_regularizer_l2 = 0.01):
+    def to_model(self, input_shape, name="default_for_op", kernel_regularizer_l2=0.01):
         # with graph.as_default():
         #     with tf.name_scope(name) as scope:
         graph_helper = self.copy()
@@ -247,10 +252,11 @@ class MyGraph(nx.DiGraph):
                     kernel_size = node.config.get('kernel_size', 3)
                     filters = node.config['filters']
                     layer = self.conv_pooling_layer(name=node.name, kernel_size=kernel_size,
-                                                    filters=filters, kernel_regularizer_l2 = kernel_regularizer_l2)
+                                                    filters=filters, kernel_regularizer_l2=kernel_regularizer_l2)
                 elif node.type == 'Group':
                     layer = self.group_layer(name=node.name, group_num=node.config['group_num'],
-                                             filters=node.config['filters'], kernel_regularizer_l2 = kernel_regularizer_l2)
+                                             filters=node.config['filters'],
+                                             kernel_regularizer_l2=kernel_regularizer_l2)
                 elif node.type == 'GlobalMaxPooling2D':
                     layer = keras.layers.GlobalMaxPooling2D(name=node.name)
                 elif node.type == 'MaxPooling2D':
@@ -263,9 +269,9 @@ class MyGraph(nx.DiGraph):
                 layer_output_tensor = layer(layer_input_tensor)
                 if node.type in ['Conv2D', 'Conv2D_Pooling', 'Group']:
                     self.update(), graph_helper.update()
-                    #MAX_DP, MIN_DP = .35, .01
-                    #ratio_dp = - (MAX_DP - MIN_DP) / self.max_depth * node.depth + MAX_DP
-                    #use fixed drop out ratio
+                    # MAX_DP, MIN_DP = .35, .01
+                    # ratio_dp = - (MAX_DP - MIN_DP) / self.max_depth * node.depth + MAX_DP
+                    # use fixed drop out ratio
                     ratio_dp = 0.30
                     layer_output_tensor = keras.layers.Dropout(ratio_dp)(layer_output_tensor)
                     # logger.debug('layer {} ratio of dropout {}'.format(node.name, ratio_dp))
@@ -323,7 +329,7 @@ class MyGraph(nx.DiGraph):
                     # def div2(x):
                     #     return x / 2.
                     # layer_input_tensors = [keras.layers.Lambda(div2)(tensor) for tensor in layer_input_tensors]
-                    layer = keras.layers.Concatenate(axis=chn_ind,name=node.name)
+                    layer = keras.layers.Concatenate(axis=chn_ind, name=node.name)
                 try:
                     layer_output_tensor = layer(layer_input_tensors)
                 except:
@@ -363,7 +369,7 @@ class MyModel(object):
             self.model = self.graph.to_model(
                 self.config.input_shape,
                 name=self.config.name,
-                kernel_regularizer_l2 = self.config.kernel_regularizer_l2)
+                kernel_regularizer_l2=self.config.kernel_regularizer_l2)
         else:
             self.model = model
 
@@ -371,13 +377,13 @@ class MyModel(object):
         if type is None:
             name2layer = {layer.name: layer for layer in self.model.layers}
         else:
-            name2layer = { }
+            name2layer = {}
             for layer in self.model.layers:
                 for t in type:
                     if t.lower() in layer.name.lower():
                         name2layer[layer.name] = layer
                         break
-            #name2layer = {layer.name: layer for layer in self.model.layers if type.lower() in layer.name.lower()}
+                        # name2layer = {layer.name: layer for layer in self.model.layers if type.lower() in layer.name.lower()}
 
         def _get_layer(name):
             return name2layer[name]
