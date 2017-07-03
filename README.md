@@ -14,13 +14,13 @@ Contributor: @luzai, @miibotree
 
 ## TODO list:
 @luzai  
+
 - [x] single model may be trained multiple time, have a nice event logger(csv or tfevents)
 - [ ] logger for model mutations and training event
 - [x] Dataset switcher (mnist, cifar100 or others) 
 - [x] write doc 
-- [ ] refine operations  
-    - [ ] wider
-    - [x] add/multiple/div2_add/div2_multiple/div2_concatenate
+- [ ] Name 
+- [ ] Vis 
 
 @miibotree
 - [x] The ratio of widening propto depth 

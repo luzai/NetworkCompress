@@ -4,13 +4,14 @@ from __future__ import division
 from __future__ import print_function
 
 import keras.backend as K
+from keras.utils.conv_utils import convert_kernel
+import keras
 import os
 
 import networkx as nx
 import numpy as np
 import scipy
 import scipy.ndimage
-from keras.utils.conv_utils import convert_kernel
 
 from Config import MyConfig
 from Logger import logger
@@ -27,6 +28,11 @@ class Net2Net(object):
             return model.model
         else:
             return model
+
+    def copy_model(self, model, config):
+        new_model = MyModel(config, model.graph.copy(), keras.models.load_model(model.config.model_path))
+        keras.models.save_model(new_model.model, new_model.config.model_path)
+        return new_model
 
     def deeper(self, model, config, with_pooling):
         # select

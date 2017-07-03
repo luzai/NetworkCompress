@@ -135,18 +135,14 @@ class GA(object):
         if self.iter != 0:
             for name, model in self.population.items():
                 model.model.load_weights(model.config.model_path)
-
-        self.iter += 1
         for name, before_model in self.population.items():
-            self.max_ind += 1
-            new_config = self.get_curr_config(before_model.config)
             suceeded = False
             while not suceeded:
                 # TODO: there are still some problems with deeper_with_pooling operation
                 evolution_choice_list = ['deeper_with_pooling', 'deeper', 'wider', 'add_skip', 'add_group']
                 weight = self.calc_choice_weight(evolution_choice_list, before_model)
                 evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_list, weight)]
-
+                # evolution_choice = 'add_group'  # only choose deeper
                 logger.info("evolution choice {}".format(evolution_choice))
                 self.evolution_choice = evolution_choice
 
@@ -163,7 +159,6 @@ class GA(object):
                     new_config = self.get_curr_config(before_model.config)
                     new_config.max_pooling_cnt = before_model.config.max_pooling_cnt
 
-                # try:
                 if evolution_choice == 'deeper':
                     after_model = self.net2net.deeper(before_model, config=new_config, with_pooling=False)
                     suceeded = True
@@ -179,17 +174,14 @@ class GA(object):
                 elif evolution_choice == 'add_group':
                     after_model = self.net2net.add_group(before_model, config=new_config)
                     suceeded = True
-                    # except Exception as inst:
-                    #     logger.error(
-                    #         "before model {} after model {} evoultion choice {} fail ref to detailed summary".format(
-                    #             before_model.config.name, after_model.config.name, evolution_choice))
-                    #     before_model.model.summary()
-                    #     after_model.model.summary()
+            Utils.line_append(line = [before_model.config.name,after_model.config.name, evolution_choice],file_path= GL_CHECKPOINT)
 
+            self.max_ind += 1
             assert 'after_model' in locals()
             # TODO interface for deep wide + weight copy
             setattr(after_model, 'parent', before_model.config.name)
             self.population[after_model.config.name] = after_model
+        self.iter += 1
 
     def train_process(self):
         client = GAClient.Client()
@@ -197,6 +189,7 @@ class GA(object):
             # if getattr(model, 'parent', None) is not None:
             # has parents means muatetion and weight change, so need to save weights
             keras.models.save_model(model.model, model.config.model_path)
+            model.graph.save_params(model.config.output_path+'/graph.json')
 
             kwargs = dict(
                 name=model.config.name,
@@ -244,22 +237,35 @@ class GA(object):
         for model in self.population.values():
             assert hasattr(model, 'score'), 'to eval we need score'
         self.population = Utils.choice_dict(self.population, self.nb_inv)
+        # update population
+        for name, model in self.population.items():
+            self.evolution_choice = 'same'
+            curr_config = self.get_curr_config()
+            # copy model
+            self.population[curr_config.name] = self.net2net.copy_model(model, curr_config)
+            Utils.line_append([self.population[name].config.name,self.population[curr_config.name].config.name,'same'],GL_CHECKPOINT)
+            del self.population[name]
+            self.max_ind += 1
 
         if len(np.unique(self.population.keys())) == self.nb_inv:
-            logger.warning("!warning: sample without replacement")
+            logger.warning("sample without replacement")
 
 
 if __name__ == "__main__":
-    global parallel, dbg
+    global parallel, dbg, GL_CHECKPOINT
     dbg = False
+    GL_CHECKPOINT = Utils.root_dir + '/output/gl_checkpoint.csv'
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
         gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=10)
         nb_inv = 2
     else:
+        import subprocess
+        subprocess.call(('sh ' + Utils.root_dir + '/clean.sh').split())
         parallel = True
-        gl_config = MyConfig(epochs=1, verbose=2, limit_data=False, name='ga', evoluation_time=10,
+        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=100,
                              dataset_type='cifar10')
-        nb_inv = 5
+        nb_inv = 2
+
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()

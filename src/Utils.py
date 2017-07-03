@@ -2,7 +2,7 @@ import os
 import re
 import subprocess
 
-import keras
+import keras, json
 import keras.backend as K
 import matplotlib
 import numpy as np
@@ -21,13 +21,38 @@ root_dir = osp.normpath(
 )
 
 from IPython.display import display, HTML, SVG
+import csv
 
 
-# TODO map lengthy name to clean name
+def line_append(line, file_path):
+    # csv fields is ['before', 'after', 'operation']
+    with open(file_path, 'a') as f:
+        writer = csv.writer(f)
+        writer.writerow(line)
+
+def read_json(file_path):
+    with open(file_path, 'r') as f:
+        obj = json.load(f)
+    return obj
+
+
+def write_json(obj, file_path):
+    with open(file_path, 'w') as f:
+        json.dump(obj, f, indent=4, separators=(',', ': '))
+
 
 def choice_dict(mdict, size):
-    choice = np.random.choice(mdict.keys(), size=size, replace=False)
-    return {name: model for name, model in mdict.items() if name in choice}
+    import Queue
+    queue = Queue.PriorityQueue()
+    for name, model in mdict.items():
+        queue.put((-model.score, name))
+    res = {}
+    for i in range(size):
+        _, name = queue.get()
+        res[name] = mdict[name]
+        # choice = np.random.choice(mdict.keys(), size=size, replace=False)
+    # {name: model for name, model in mdict.items() if name in choice}
+    return res
 
 
 def choice_dict_keep_latest(mdict, size):
@@ -69,6 +94,7 @@ def mkdir_p(name, delete=True):
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     if delete and tf.gfile.Exists(name):
         tf.gfile.DeleteRecursively(name)
+        logger.warning('delte files under {}'.format(name))
     tf.gfile.MakeDirs(name)
 
 
@@ -87,7 +113,7 @@ def vis_model(model, name='net2net', show_shapes=True):
     mkdir_p(sav_path, delete=False)
     keras.models.save_model(model, osp.join(sav_path, name + '.h5'))
     try:
-        vis_utils.plot_model(model, to_file=osp.join(sav_path, name + '.pdf'), show_shapes=show_shapes)
+        # vis_utils.plot_model(model, to_file=osp.join(sav_path, name + '.pdf'), show_shapes=show_shapes)
         vis_utils.plot_model(model, to_file=osp.join(sav_path, name + '.png'), show_shapes=show_shapes)
     except Exception as inst:
         logger.error("cannot keras.plot_model {}".format(inst))
@@ -116,6 +142,7 @@ def vis_graph(graph, name='net2net', show=False):
 
 
 def nvidia_smi():
+    # todo now we only use gpu 0
     proc = subprocess.Popen("nvidia-smi --query-gpu=index,memory.free --format=csv".split()
                             , stdout=subprocess.PIPE)
     (out, err) = proc.communicate()

@@ -28,7 +28,7 @@ class MyConfig(object):
     cache_data = None
 
     def __init__(self, epochs=100, verbose=1, limit_data=False, name='default_name', evoluation_time=1, clean=True,
-                 dataset_type='cifar10', max_pooling_cnt=0, debug = False):
+                 dataset_type='cifar10', max_pooling_cnt=0, debug=False):
         # for all model:
         self.dataset_type = dataset_type
         self.limit_data = limit_data
@@ -42,7 +42,7 @@ class MyConfig(object):
             self.load_data(9999, type=self.dataset_type)
         else:
             self.load_data(1, type=self.dataset_type)
-        print('load data: x shape {}, y shape {}'.format(self.dataset['train_x'].shape, self.dataset['train_y'].shape))
+
         # for ga:
         self.evoluation_time = evoluation_time
 
@@ -129,6 +129,8 @@ class MyConfig(object):
             for key, val in res.iteritems():
                 res[key] = MyConfig._limit_data(val, limit_data)
             MyConfig.cache_data = res
+            print('load data: x shape {}, y shape {}'.format(res['train_x'].shape,
+                                                             res['train_y'].shape))
         self.dataset = MyConfig.cache_data
 
 

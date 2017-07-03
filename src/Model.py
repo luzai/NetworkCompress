@@ -360,12 +360,24 @@ class MyGraph(nx.DiGraph):
             logger.error(str(inst))
         return _str
 
+    def save_params(self, path):
+        E = len(self.edges())
+        V = len(self.nodes())
+        for node in self.nodes():
+            if node.type.lower() == 'group':
+                E += node.config['group_num']*2
+                V += node.config['group_num']
+        sav = {}
+        sav['E'] = E
+        sav['V'] = V
+        Utils.write_json(sav, path)
+
 
 class MyModel(object):
     def __init__(self, config, graph=None, model=None):
         self.config = config
+        self.graph = graph
         if model is None:
-            self.graph = graph
             self.model = self.graph.to_model(
                 self.config.input_shape,
                 name=self.config.name,
@@ -436,7 +448,7 @@ class MyModel(object):
 
     def vis(self):
         Utils.vis_model(self.model, self.config.name)
-        if hasattr(self, 'graph'):
+        if self.graph is not None:
             Utils.vis_graph(self.graph, self.config.name, show=False)
         logger.info("Vis model {} :".format(self.config.name))
         self.model.summary()
@@ -445,16 +457,23 @@ class MyModel(object):
             "model {} trainable weight {} MB, non trainable_weight {} MB".format(self.config.name,
                                                                                  trainable_count,
                                                                                  non_trainable_count))
+        return trainable_count + non_trainable_count
 
     def comp_fit_eval(self):
 
         self.compile()
-        self.vis()
+        weight = self.vis()
         hist = self.fit()
-
+        import time
+        tic = time.time()
         score = self.evaluate()
+        test_time = time.time() - tic
         logger.info('model {} loss {} and accuracy {} \n'.format(self.config.name, score[0], score[1]))
-
+        sav_data = {}
+        sav_data['param'] = weight  # count unit is MB
+        sav_data['val_acc'] = score[1]
+        sav_data['test_time'] = test_time
+        Utils.write_json(sav_data, self.config.output_path + '/info.json')
         return score[-1]
 
 

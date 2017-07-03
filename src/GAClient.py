@@ -58,7 +58,7 @@ class Client:
             else:
                 while returncode != 0:
                     # self.max_run -= 1
-                    if Utils.nvidia_smi() < .2:
+                    while Utils.nvidia_smi() < .2:
                         time.sleep(10)
                     logger.info('fit fail return code is {}'.format(returncode))
                     if returncode != NOMEM:
@@ -90,7 +90,6 @@ class Client:
 def run(name, epochs=100, verbose=1, limit_data=False, dataset_type='cifar10'):
     try:
         import keras
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         import tensorflow as tf
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         from Config import MyConfig
@@ -113,7 +112,6 @@ def run(name, epochs=100, verbose=1, limit_data=False, dataset_type='cifar10'):
             score = model.comp_fit_eval()
             keras.models.save_model(model.model, model.config.model_path)
             return name, score
-
     except Exception as inst:
         print 'INST is'
         print str(inst)
