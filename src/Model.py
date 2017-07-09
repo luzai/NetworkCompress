@@ -296,7 +296,7 @@ class MyGraph(nx.DiGraph):
                         if diff_shape.any():
                             diff_shape += 1
                             layer_input_tensors[ind] = \
-                                keras.layers.MaxPool2D(pool_size=diff_shape, strides=1, name=node.name + '_maxpool2d')(
+                                keras.layers.MaxPool2D(pool_size=diff_shape, strides=1, name=node.name + '_conv2d_pooling')(
                                     layer_input_tensor)
                         if ori_chnls[ind] > new_chnl:
                             layer_input_tensors[ind] = \
@@ -361,6 +361,29 @@ class MyGraph(nx.DiGraph):
         return _str
 
     def save_params(self, path):
+        #save depth, max width, min width, cardinality of the model
+        depth = 0
+        cardinality = 1
+        max_width = -1
+        min_width = 120
+        for node in self.nodes():
+            if node.type == 'Conv2D' or node.type == 'Conv2D_Pooling' or node.type == 'Group':
+                depth = depth + 1
+                if node.type == 'Group':
+                    cardinality = cardinality * node.config['group_num']
+                if node.config['filters'] > max_width:
+                    max_width = node.config['filters']
+            if node.type == 'Add':
+                cardinality = cardinality * 2
+        cardinality = cardinality * depth
+        sav = {}
+        sav['c'] = cardinality
+        sav['h'] = depth
+        sav['w'] = max_width
+        sav['w0'] = min_width
+
+        #depressed
+        '''
         E = len(self.edges())
         V = len(self.nodes())
         for node in self.nodes():
@@ -370,6 +393,7 @@ class MyGraph(nx.DiGraph):
         sav = {}
         sav['E'] = E
         sav['V'] = V
+        '''
         Utils.write_json(sav, path)
 
 
@@ -459,6 +483,43 @@ class MyModel(object):
                                                                                  non_trainable_count))
         return trainable_count + non_trainable_count
 
+
+    '''
+        Fit(n) = alpha * P(n) + beta * T(n) + gama * S(n) + eta * ST(n)
+        
+        P(n)  = val_acc(n) / val_acc(teacher)
+        ST(n) = 2 * (sig(c / (h * w / w0)) - 0.5)   
+            c is cardinality of model, h is depth of model, w is max width of model
+    '''
+    @staticmethod
+    def fitness_function(info, path):
+
+        def sigmoid(x):
+            import math
+            return 1.0 / (1.0 + math.exp(-x))
+
+        #load graph's E and V
+        path = path + '/graph.json'
+        if os.path.isfile(path) == True:
+            with open(path, 'r') as f:
+                graph_info = json.load(f)
+
+        alpha, beta, gama, eta = 1, 1, 1, 1
+
+        #TODO: how to set these variables
+        teacher_param = 5.0
+        teacher_val_acc = 0.99
+        teacher_test_time = 2
+
+        norm_param = 1 - info['param'] / teacher_param
+        norm_acc = info['val_acc'] / teacher_val_acc
+        norm_test_time = 1 - info['test_time'] / teacher_test_time
+        norm_model_struct = 2 * (sigmoid(graph_info['c'] / (graph_info['h'] * graph_info['w'] / graph_info['w0'])) - 0.5)
+
+        final_score = alpha * norm_param + beta * norm_acc + gama * norm_test_time + eta * norm_model_struct
+
+        return final_score
+
     def comp_fit_eval(self):
 
         self.compile()
@@ -474,6 +535,8 @@ class MyModel(object):
         sav_data['val_acc'] = score[1]
         sav_data['test_time'] = test_time
         Utils.write_json(sav_data, self.config.output_path + '/info.json')
+
+        #final_score = MyModel.fitness_function(sav_data, self.config.output_path)
         return score[-1]
 
 

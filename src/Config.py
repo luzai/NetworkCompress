@@ -129,8 +129,7 @@ class MyConfig(object):
             for key, val in res.iteritems():
                 res[key] = MyConfig._limit_data(val, limit_data)
             MyConfig.cache_data = res
-            print('load data: x shape {}, y shape {}'.format(res['train_x'].shape,
-                                                             res['train_y'].shape))
+
         self.dataset = MyConfig.cache_data
 
 

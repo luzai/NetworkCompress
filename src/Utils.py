@@ -42,6 +42,10 @@ def write_json(obj, file_path):
 
 
 def choice_dict(mdict, size):
+    # for test
+    #choice = np.random.choice(mdict.keys(), size=size, replace=False)
+    #return {name: model for name, model in mdict.items() if name in choice}
+
     import Queue
     queue = Queue.PriorityQueue()
     for name, model in mdict.items():
@@ -50,8 +54,6 @@ def choice_dict(mdict, size):
     for i in range(size):
         _, name = queue.get()
         res[name] = mdict[name]
-        # choice = np.random.choice(mdict.keys(), size=size, replace=False)
-    # {name: model for name, model in mdict.items() if name in choice}
     return res
 
 

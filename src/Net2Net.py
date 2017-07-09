@@ -30,6 +30,12 @@ class Net2Net(object):
             return model
 
     def copy_model(self, model, config):
+        from keras.utils.generic_utils import get_custom_objects
+        from Model import IdentityConv, GroupIdentityConv
+
+        get_custom_objects()['IdentityConv'] = IdentityConv
+        get_custom_objects()['GroupIdentityConv'] = GroupIdentityConv
+
         new_model = MyModel(config, model.graph.copy(), keras.models.load_model(model.config.model_path))
         keras.models.save_model(new_model.model, new_model.config.model_path)
         return new_model
@@ -46,10 +52,10 @@ class Net2Net(object):
                 break
         if not with_pooling:
             logger.info('choose {} to deeper'.format(choice))
-            return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config, with_pooling=False)
+            return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config, with_pooling=False), True
         else:
             logger.info('choose {} to deeper_with_pooling'.format(choice))
-            return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config, with_pooling=True)
+            return self.deeper_conv2d(model, choice, kernel_size=3, filters='same', config=config, with_pooling=True), True
 
     # find two conjacent conv layers, conv -> group is not allowed, only conv -> conv layer is okay
     # TODO: conv -> maxpooling -> conv, maxpooling will missing, same problem exists in deeper operation
@@ -59,11 +65,12 @@ class Net2Net(object):
                  for node in topo_nodes
                  if
                  node.type == 'Conv2D' or node.type == 'Conv2D_Pooling' or node.type == 'Group']  # support group layer to wider
+                 #node.type == 'Conv2D' or node.type == 'Conv2D_Pooling']
         max_iter = 100
         for i in range(max_iter + 1):
             if i == max_iter:
                 logger.info('can\'t find a suitable layer to apply wider operation,return origin model')
-                return model
+                return model, False
             # random choose a layer to wider, except last conv layer
             choice = names[np.random.randint(0, len(names) - 1)]
             cur_node = model.graph.get_nodes(choice)[0]
@@ -86,12 +93,12 @@ class Net2Net(object):
 
         if new_width <= cur_width:
             logger.info('{} layer\'s width up to limit!'.format(choice))
-            return model
+            return model, False
         logger.info('choose {} to wider'.format(choice))
         if cur_node.type == 'Group':
-            return self.wider_group_conv2d(model, layer_name=choice, new_width=new_width, config=config)
+            return self.wider_group_conv2d(model, layer_name=choice, new_width=new_width, config=config), True
         else:
-            return self.wider_conv2d(model, layer_name=choice, new_width=new_width, config=config)
+            return self.wider_conv2d(model, layer_name=choice, new_width=new_width, config=config), True
 
     '''
         TODO: random choose two layer to skip 
@@ -106,13 +113,13 @@ class Net2Net(object):
 
         if len(names) <= 2:
             logger.info('can\'t find a suitable layer to apply add_skip operation,return origin model')
-            return model
+            return model, False
 
         max_iter = 100
         for i in range(max_iter + 1):
             if i == max_iter:
                 logger.info('can\'t find a suitable layer to apply add_skip operation,return origin model')
-                return model
+                return model, False
             from_idx = np.random.randint(0, len(names) - 2)
             to_idx = from_idx + 1
             next_nodes = model.graph.get_nodes(names[to_idx], next_layer=True, last_layer=False)
@@ -124,7 +131,7 @@ class Net2Net(object):
         from_name = names[from_idx]
         to_name = names[to_idx]
         logger.info('choose {} and {} to add_skip'.format(from_name, to_name))
-        return self.skip(model, from_name, to_name, config)
+        return self.skip(model, from_name, to_name, config), True
 
     # add group operation
     def add_group(self, model, config):
@@ -158,7 +165,7 @@ class Net2Net(object):
         new_model = MyModel(config=config, graph=new_graph)
 
         self.copy_weight(model, new_model)
-        return new_model
+        return new_model, True
 
     def maxpool_by_name(self, model, name, config):
         new_graph = model.graph.copy()
@@ -321,7 +328,8 @@ class Net2Net(object):
                 b_conv_group = np.concatenate((b_conv_group, b_conv2), axis=0)
 
         # find group layer's next conv layer
-        w_conv2, b_conv2 = model.get_layers(layer_name, next_layer=True, type=['Conv2D', 'Group'])[0].get_weights()
+
+        w_conv2, b_conv2 = model.get_layers(layer_name, next_layer=True, type=['Conv2D', 'Conv2D_Pooling', 'Group'])[0].get_weights()
 
         new_w_conv_group, new_b_conv_group, new_w_conv2 = Net2Net._wider_conv2d_weight(
             w_conv_group, b_conv_group, w_conv2, new_width, "net2wider")
@@ -337,7 +345,7 @@ class Net2Net(object):
                     [new_w_conv_group[:, :, :, i * filter_num: (i + 1) * filter_num],
                      new_b_conv_group[i * filter_num: (i + 1) * filter_num]])
 
-        new_model.get_layers(layer_name, next_layer=True, type=['Conv2D', 'Group'])[0].set_weights(
+        new_model.get_layers(layer_name, next_layer=True, type=['Conv2D', 'Conv2D_Pooling', 'Group'])[0].set_weights(
             [new_w_conv2, b_conv2])
 
         return new_model
@@ -469,10 +477,8 @@ if __name__ == "__main__":
     config = MyConfig(epochs=10, verbose=1, limit_data=True, name='before', dataset_type='cifar10')
     model_l = [["Conv2D", 'Conv2D1', {'filters': 64}],
                ["MaxPooling2D", 'maxpooling2d1', {}],
-               ["Group", 'Group1', {'filters': 64, 'group_num': 4}],
-               ["MaxPooling2D", 'maxpooling2d2', {}],
-               ["Conv2D", 'Conv2D2', {'filters': 256}],
-               ["MaxPooling2D", 'maxpooling2d3', {}],
+               ["Group", 'Group1', {'filters': 120, 'group_num': 2}],
+               ["Conv2D_Pooling", 'Conv2D_Pooling_1', {'filters': 139}],
                ["Conv2D", 'Conv2D3', {'filters': 10}],
                ['GlobalMaxPooling2D', 'GlobalMaxPooling2D1', {}],
                ['Activation', 'Activation1', {'activation_type': 'softmax'}]]
@@ -482,11 +488,11 @@ if __name__ == "__main__":
 
     net2net = Net2Net()
 
-    model = net2net.wider_group_conv2d(before_model, layer_name='Group1', new_width=128,
+    model = net2net.wider_group_conv2d(before_model, layer_name='Group1', new_width=174,
                                        config=config.copy('wider_group'))
     model.comp_fit_eval()
 
-    '''
+    ''' 
     model = net2net.deeper(before_model, config=config.copy('deeper1'))
     model = net2net.deeper_conv2d(before_model, layer_name='Conv2D2', config=config.copy('deeper1'))
     model = net2net.wider_conv2d(model, layer_name='Conv2D2', width_ratio=2, config=config.copy('wide'))

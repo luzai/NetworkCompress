@@ -6,7 +6,6 @@ import time, Utils
 
 import numpy as np
 import os.path as osp
-from Model import IdentityConv, GroupIdentityConv
 from Logger import logger
 
 root_dir = osp.normpath(
@@ -95,6 +94,7 @@ def run(name, epochs=100, verbose=1, limit_data=False, dataset_type='cifar10'):
         from Config import MyConfig
         from Model import MyModel
         from keras.utils.generic_utils import get_custom_objects
+        from Model import IdentityConv, GroupIdentityConv
 
         get_custom_objects()['IdentityConv'] = IdentityConv
         get_custom_objects()['GroupIdentityConv'] = GroupIdentityConv

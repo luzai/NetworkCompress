@@ -117,11 +117,11 @@ class GA(object):
         weight = {}
         if 'deeper_with_pooling' in evolution_choice_list:
             weight['deeper_with_pooling'] = int(
-                model_max_depth - model_max_depth / (2 * max_pooling_limit) * max_pooling_cnt) * 3
+                model_max_depth - model_max_depth / (2 * max_pooling_limit) * max_pooling_cnt)
         if 'deeper' in evolution_choice_list:
             weight['deeper'] = model_max_depth / 2
         if 'wider' in evolution_choice_list:
-            weight['wider'] = model_max_depth / 2 * 2
+            weight['wider'] = model_max_depth / 2
         if 'add_skip' in evolution_choice_list:
             weight['add_skip'] = model_depth / 2
         if 'add_group' in evolution_choice_list:
@@ -141,8 +141,13 @@ class GA(object):
                 # TODO: there are still some problems with deeper_with_pooling operation
                 evolution_choice_list = ['deeper_with_pooling', 'deeper', 'wider', 'add_skip', 'add_group']
                 weight = self.calc_choice_weight(evolution_choice_list, before_model)
+                if before_model.config.max_pooling_cnt >= before_model.config.max_pooling_limit:
+                    weight['deeper_with_pooling'] = 0
                 evolution_choice = evolution_choice_list[Utils.weight_choice(evolution_choice_list, weight)]
-                # evolution_choice = 'add_group'  # only choose deeper
+
+                self.choice_weight.append(weight)
+                self.choice_idx.append(evolution_choice)
+
                 logger.info("evolution choice {}".format(evolution_choice))
                 self.evolution_choice = evolution_choice
 
@@ -151,6 +156,8 @@ class GA(object):
                 if evolution_choice == 'deeper_with_pooling':
                     if before_model.config.max_pooling_cnt >= before_model.config.max_pooling_limit:
                         logger.warning('max_pooling layer up to limit, choose other evolution_choise')
+                        self.choice_weight.pop()
+                        self.choice_idx.pop()
                         continue
                     else:
                         new_config = self.get_curr_config(before_model.config)
@@ -158,22 +165,29 @@ class GA(object):
                 else:
                     new_config = self.get_curr_config(before_model.config)
                     new_config.max_pooling_cnt = before_model.config.max_pooling_cnt
+                try:
+                    if evolution_choice == 'deeper':
+                        after_model, suceeded = self.net2net.deeper(before_model, config=new_config, with_pooling=False)
+                    elif evolution_choice == 'deeper_with_pooling':
+                        after_model, suceeded = self.net2net.deeper(before_model, config=new_config, with_pooling=True)
+                    elif evolution_choice == 'wider':
+                        after_model, suceeded = self.net2net.wider(before_model, config=new_config)
+                    elif evolution_choice == 'add_skip':
+                        after_model, suceeded = self.net2net.add_skip(before_model, config=new_config)
+                    elif evolution_choice == 'add_group':
+                        after_model, suceeded = self.net2net.add_group(before_model, config=new_config)
 
-                if evolution_choice == 'deeper':
-                    after_model = self.net2net.deeper(before_model, config=new_config, with_pooling=False)
-                    suceeded = True
-                elif evolution_choice == 'deeper_with_pooling':
-                    after_model = self.net2net.deeper(before_model, config=new_config, with_pooling=True)
-                    suceeded = True
-                elif evolution_choice == 'wider':
-                    after_model = self.net2net.wider(before_model, config=new_config)
-                    suceeded = True
-                elif evolution_choice == 'add_skip':
-                    after_model = self.net2net.add_skip(before_model, config=new_config)
-                    suceeded = True
-                elif evolution_choice == 'add_group':
-                    after_model = self.net2net.add_group(before_model, config=new_config)
-                    suceeded = True
+                    if suceeded == False:
+                        self.choice_weight.pop()
+                        self.choice_idx.pop()
+
+                except Exception as inst:
+                    logger.error(
+                        "before model {} after model {} evoultion choice {} fail ref to detailed summary".format(
+                        before_model.config.name, after_model.config.name, evolution_choice))
+                    before_model.model.summary()
+                    after_model.model.summary()
+
             Utils.line_append(line = [before_model.config.name,after_model.config.name, evolution_choice],file_path= GL_CHECKPOINT)
 
             self.max_ind += 1
@@ -217,6 +231,13 @@ class GA(object):
             config = self.get_curr_config()
             self.population[config.name] = MyModel(config=config, graph=graph)
             self.max_ind += 1
+
+        # for test: save these weights according to iter and record the choice
+        self.choice_weight = []
+        self.choice_idx = []
+        f_handle1 = file('../output/choice_prob.npy', 'a')
+        f_handle2 = file('../output/choice_idx.npy', 'a')
+
         for i in range(self.gl_config.evoluation_time):
             logger.info("Now {} evolution ".format(i + 1))
             if dbg:
@@ -227,6 +248,11 @@ class GA(object):
                 self.mutation_process()
                 self.train_process()
                 self.select_process()
+
+        np.save(f_handle1, self.choice_weight)
+        np.save(f_handle2, self.choice_idx)
+        f_handle1.close()
+        f_handle2.close()
 
     def select_process(self):
         # for debug, just keep the latest evolutioned model
@@ -257,15 +283,15 @@ if __name__ == "__main__":
     GL_CHECKPOINT = Utils.root_dir + '/output/gl_checkpoint.csv'
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
-        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=10)
-        nb_inv = 2
+        gl_config = MyConfig(epochs=0, verbose=2, limit_data=True, name='ga', evoluation_time=10)
+        nb_inv = 5
     else:
         import subprocess
         subprocess.call(('sh ' + Utils.root_dir + '/clean.sh').split())
         parallel = True
-        gl_config = MyConfig(epochs=1, verbose=2, limit_data=True, name='ga', evoluation_time=100,
+        gl_config = MyConfig(epochs=0, verbose=2, limit_data=True, name='ga', evoluation_time=20,
                              dataset_type='cifar10')
-        nb_inv = 2
+        nb_inv = 6
 
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()
