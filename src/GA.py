@@ -86,7 +86,7 @@ class GA(object):
 
         return model_list
 
-    def get_curr_config(self, parent_config=None):
+    def get_curr_config(self,parent_config=None):
         if hasattr(self, 'evolution_choice'):
             name = 'ga_iter_' + str(self.iter) + '_ind_' + str(self.max_ind) + '_' + self.evolution_choice
         else:
@@ -140,6 +140,7 @@ class GA(object):
             while not suceeded:
                 # TODO: there are still some problems with deeper_with_pooling operation
                 evolution_choice_list = ['deeper_with_pooling', 'deeper', 'wider', 'add_skip', 'add_group']
+
                 weight = self.calc_choice_weight(evolution_choice_list, before_model)
                 if before_model.config.max_pooling_cnt >= before_model.config.max_pooling_limit:
                     weight['deeper_with_pooling'] = 0
@@ -162,6 +163,7 @@ class GA(object):
                     else:
                         new_config = self.get_curr_config(before_model.config)
                         new_config.max_pooling_cnt = before_model.config.max_pooling_cnt + 1
+                        logger.info('max_pooling_cnt is ' + str(new_config.max_pooling_cnt))
                 else:
                     new_config = self.get_curr_config(before_model.config)
                     new_config.max_pooling_cnt = before_model.config.max_pooling_cnt
@@ -263,10 +265,11 @@ class GA(object):
         for model in self.population.values():
             assert hasattr(model, 'score'), 'to eval we need score'
         self.population = Utils.choice_dict(self.population, self.nb_inv)
+
         # update population
         for name, model in self.population.items():
             self.evolution_choice = 'same'
-            curr_config = self.get_curr_config()
+            curr_config = self.get_curr_config(parent_config=model.config)
             # copy model
             self.population[curr_config.name] = self.net2net.copy_model(model, curr_config)
             Utils.line_append([self.population[name].config.name,self.population[curr_config.name].config.name,'same'],GL_CHECKPOINT)
@@ -289,9 +292,9 @@ if __name__ == "__main__":
         import subprocess
         subprocess.call(('sh ' + Utils.root_dir + '/clean.sh').split())
         parallel = True
-        gl_config = MyConfig(epochs=0, verbose=2, limit_data=True, name='ga', evoluation_time=20,
+        gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=20,
                              dataset_type='cifar10')
-        nb_inv = 6
+        nb_inv = 5
 
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()

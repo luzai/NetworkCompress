@@ -296,7 +296,7 @@ class MyGraph(nx.DiGraph):
                         if diff_shape.any():
                             diff_shape += 1
                             layer_input_tensors[ind] = \
-                                keras.layers.MaxPool2D(pool_size=diff_shape, strides=1, name=node.name + '_conv2d_pooling')(
+                                keras.layers.MaxPool2D(pool_size=diff_shape, strides=1, name=node.name + '_maxpool2d')(
                                     layer_input_tensor)
                         if ori_chnls[ind] > new_chnl:
                             layer_input_tensors[ind] = \
@@ -333,6 +333,7 @@ class MyGraph(nx.DiGraph):
                 try:
                     layer_output_tensor = layer(layer_input_tensors)
                 except:
+                    print("")
                     embed()
             graph_helper.add_node(node, layer=layer)
 
