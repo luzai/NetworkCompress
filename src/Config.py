@@ -36,7 +36,10 @@ class MyConfig(object):
             self.input_shape = (32, 32, 3)
         else:
             self.input_shape = (28, 28, 1)
-        self.nb_class = 10
+        if dataset_type == 'cifar100':
+            self.nb_class = 100
+        else:
+            self.nb_class = 10
         self.dataset = None
         if limit_data:
             self.load_data(9999, type=self.dataset_type)
@@ -53,7 +56,7 @@ class MyConfig(object):
         self.verbose = verbose
         self.lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, patience=10,
                                             min_lr=0.5e-7)
-        self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5)
+        self.early_stopper = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=10)
         self.csv_logger = None
         self.set_logger_path(self.name + '.csv')
         self.debug = debug
@@ -63,7 +66,7 @@ class MyConfig(object):
         self.model_max_conv_width = 1024
         self.model_min_conv_width = 128
         self.model_max_depth = 20
-        self.kernel_regularizer_l2 = 0.0
+        self.kernel_regularizer_l2 = 0.01
 
     def set_logger_path(self, name):
         self.csv_logger = CSVLogger(osp.join(self.output_path, name))

@@ -82,9 +82,14 @@ class Net2Net(object):
 
         cur_width = cur_node.config['filters']
 
-        max_cur_width = int(
-            (config.model_max_conv_width - config.model_min_conv_width) * cur_node.depth / config.model_max_depth) \
-                        + config.model_min_conv_width
+        # for test
+        # enlarge the max_cur_width
+        #max_cur_width = (int((config.model_max_conv_width - config.model_min_conv_width) * cur_node.depth / config.model_max_depth) \
+        #                + config.model_min_conv_width) * 5
+
+        # for test
+        max_cur_width = 1024
+
         width_ratio = np.random.rand()
         new_width = int(cur_width + width_ratio * (max_cur_width - cur_width))
         if cur_node.type == 'Group':
@@ -217,6 +222,7 @@ class Net2Net(object):
                        'maxpooling2d' not in l.name.lower() and
                        'add' not in l.name.lower() and
                        'dropout' not in l.name.lower() and
+                       'p_re_lu' not in l.name.lower() and
                        'concatenate' not in l.name.lower()]
         for name in layer_names:
             weights = _before_model.get_layer(name=name).get_weights()

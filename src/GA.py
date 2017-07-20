@@ -14,6 +14,7 @@ from Logger import logger
 from Model import MyModel, MyGraph
 from Net2Net import Net2Net
 import networkx as nx
+from keras.layers.advanced_activations import PReLU
 
 
 class GA(object):
@@ -40,18 +41,24 @@ class GA(object):
         init_model_index = random.randint(1, 4)
         init_model_index = 1
         if init_model_index == 1:  # one conv layer with kernel num = 64
-            stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
+            stem_conv_1 = Conv2D(128, 3, padding='same', name='conv2d1' )(input_data)
+            stem_conv_1 = PReLU()(stem_conv_1)
 
         elif init_model_index == 2:  # two conv layers with kernel num = 64
-            stem_conv_0 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
-            stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d2')(stem_conv_0)
+            stem_conv_0 = Conv2D(128, 3, padding='same', name='conv2d1')(input_data)
+            stem_conv_0 = PReLU()(stem_conv_0)
+            stem_conv_1 = Conv2D(128, 3, padding='same', name='conv2d2')(stem_conv_0)
+            stem_conv_1 = PReLU()(stem_conv_1)
 
         elif init_model_index == 3:  # one conv layer with a wider kernel num = 128
-            stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
+            stem_conv_1 = Conv2D(256, 3, padding='same', name='conv2d1')(input_data)
+            stem_conv_1 = PReLU()(stem_conv_1)
 
         elif init_model_index == 4:  # two conv layers with a wider kernel_num = 128
-            stem_conv_0 = Conv2D(120, 3, padding='same', name='conv2d1')(input_data)
-            stem_conv_1 = Conv2D(120, 3, padding='same', name='conv2d2')(stem_conv_0)
+            stem_conv_0 = Conv2D(256, 3, padding='same', name='conv2d1')(input_data)
+            stem_conv_0 = PReLU()(stem_conv_0)
+            stem_conv_1 = Conv2D(256, 3, padding='same', name='conv2d2')(stem_conv_0)
+            stem_conv_1 = PReLU()(stem_conv_1)
         import keras
         stem_conv_1 = keras.layers.MaxPooling2D(name='maxpooling2d1')(stem_conv_1)
         stem_conv_1 = Conv2D(self.gl_config.nb_class, 3, padding='same', name='conv2d3')(stem_conv_1)
@@ -123,9 +130,9 @@ class GA(object):
         if 'wider' in evolution_choice_list:
             weight['wider'] = model_max_depth / 2
         if 'add_skip' in evolution_choice_list:
-            weight['add_skip'] = model_depth / 2
+            weight['add_skip'] = model_depth / 2 * 2
         if 'add_group' in evolution_choice_list:
-            weight['add_group'] = model_depth / 2
+            weight['add_group'] = model_depth / 2 * 2
 
         # choice_len = len(evolution_choice_list)
         # return [1] * choice_len # equal weight now
@@ -282,19 +289,19 @@ class GA(object):
 
 if __name__ == "__main__":
     global parallel, dbg, GL_CHECKPOINT
-    dbg = False
+    dbg = True
     GL_CHECKPOINT = Utils.root_dir + '/output/gl_checkpoint.csv'
     if dbg:
         parallel = False  # if want to dbg set epochs=1 and limit_data=True
         gl_config = MyConfig(epochs=0, verbose=2, limit_data=True, name='ga', evoluation_time=10)
-        nb_inv = 5
+        nb_inv = 1
     else:
         import subprocess
         subprocess.call(('sh ' + Utils.root_dir + '/clean.sh').split())
         parallel = True
         gl_config = MyConfig(epochs=50, verbose=2, limit_data=False, name='ga', evoluation_time=20,
                              dataset_type='cifar10')
-        nb_inv = 5
+        nb_inv = 4
 
     ga = GA(gl_config=gl_config, nb_inv=nb_inv)
     ga.ga_main()

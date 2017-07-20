@@ -19,6 +19,8 @@ import Utils
 from Utils import vis_graph, vis_model
 from Config import MyConfig
 from Logger import logger
+from keras.layers.normalization import BatchNormalization
+from keras.layers.advanced_activations import PReLU
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -179,7 +181,8 @@ class MyGraph(nx.DiGraph):
     def conv_pooling_layer(self, name, kernel_size, filters, kernel_regularizer_l2):
         def f(input):
             layer = Conv2D(kernel_size=kernel_size, filters=filters, name=name, padding='same',
-                           activation='relu', kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(input)
+                           kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(input)
+            layer = PReLU()(layer)
             layer = keras.layers.MaxPooling2D(name=name + '_maxpooling')(layer)
             return layer
 
@@ -191,8 +194,9 @@ class MyGraph(nx.DiGraph):
                 tower = Conv2D(filters, (1, 1), name=name + '_conv2d_0_1', padding='same',
                                kernel_initializer=IdentityConv())(input)
                 tower = Conv2D(filters, (3, 3), name=name + '_conv2d_0_2', padding='same',
-                               kernel_initializer=IdentityConv(), activation='relu',
+                               kernel_initializer=IdentityConv(),
                                kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(tower)
+                tower = PReLU()(tower)
                 return tower
             else:
                 group_output = []
@@ -205,8 +209,9 @@ class MyGraph(nx.DiGraph):
                     tower = Conv2D(filter_num, (1, 1), name=name + '_conv2d_' + str(i) + '_1', padding='same',
                                    kernel_initializer=GroupIdentityConv(i, group_num))(input)
                     tower = Conv2D(filter_num, (3, 3), name=name + '_conv2d_' + str(i) + '_2', padding='same',
-                                   kernel_initializer=IdentityConv(), activation='relu',
+                                   kernel_initializer=IdentityConv(),
                                    kernel_regularizer=regularizers.l2(kernel_regularizer_l2))(tower)
+                    tower = PReLU()(tower)
                     group_output.append(tower)
 
                 if K.image_data_format() == 'channels_first':
@@ -245,7 +250,6 @@ class MyGraph(nx.DiGraph):
                     filters = node.config['filters']
                     layer = Conv2D(kernel_size=kernel_size, filters=filters,
                                    name=node.name, padding='same',
-                                   activation='relu',
                                    kernel_regularizer=regularizers.l2(kernel_regularizer_l2)
                                    )
                 elif node.type == 'Conv2D_Pooling':
@@ -269,12 +273,18 @@ class MyGraph(nx.DiGraph):
                 layer_output_tensor = layer(layer_input_tensor)
                 if node.type in ['Conv2D', 'Conv2D_Pooling', 'Group']:
                     self.update(), graph_helper.update()
+
+                    if node.type == 'Conv2D':
+                        layer_output_tensor = PReLU()(layer_output_tensor)
                     # MAX_DP, MIN_DP = .35, .01
                     # ratio_dp = - (MAX_DP - MIN_DP) / self.max_depth * node.depth + MAX_DP
                     # use fixed drop out ratio
                     ratio_dp = 0.30
                     layer_output_tensor = keras.layers.Dropout(ratio_dp)(layer_output_tensor)
                     # logger.debug('layer {} ratio of dropout {}'.format(node.name, ratio_dp))
+
+                    # for test, use batch norm
+                    #layer_output_tensor = keras.layers.BatchNormalization(axis = 3)(layer_output_tensor)
 
             else:
                 layer_input_tensors = [graph_helper[pre_node][node]['tensor'] for pre_node in pre_nodes]
@@ -333,8 +343,8 @@ class MyGraph(nx.DiGraph):
                 try:
                     layer_output_tensor = layer(layer_input_tensors)
                 except:
-                    print("")
-                    embed()
+                    print("create intput output layer error!")
+                    #embed()
             graph_helper.add_node(node, layer=layer)
 
             if len(suc_nodes) == 0:
@@ -428,9 +438,11 @@ class MyModel(object):
         nodes = self.graph.get_nodes(name, next_layer, last_layer, type=type)
         if not isinstance(nodes, list):
             nodes = [nodes]
+        '''
         for node in nodes:
             if node.name not in name2layer:
                 embed()
+        '''
         return map(_get_layer, [node.name for node in nodes])
 
     def compile(self):
